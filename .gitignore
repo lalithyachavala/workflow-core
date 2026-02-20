@@ -1,0 +1,19 @@
+node_modules/
+.DS_Store
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+
+# Flutter
+apps/windows_client/.dart_tool/
+apps/windows_client/build/
+apps/windows_client/.flutter-plugins
+apps/windows_client/.flutter-plugins-dependencies
+apps/windows_client/.packages
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
