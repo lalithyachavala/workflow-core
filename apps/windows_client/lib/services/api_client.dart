@@ -26,6 +26,20 @@ class ApiClient {
     return json;
   }
 
+  Future<void> logout() async {
+    final refreshToken = await _tokenStore.getRefreshToken();
+    if (refreshToken != null) {
+      try {
+        await http.post(
+          Uri.parse("$baseUrl/auth/logout"),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"refreshToken": refreshToken}),
+        );
+      } catch (_) {}
+    }
+    await _tokenStore.clear();
+  }
+
   Future<void> clockIn(String imageBase64) async {
     await _clock("/attendance/clock-in", imageBase64);
   }
