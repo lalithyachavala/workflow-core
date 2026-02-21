@@ -2,7 +2,20 @@ import "dart:convert";
 import "package:flutter/material.dart";
 import "../widgets/attendance_bar_chart.dart";
 
-class EmployeesScreen extends StatelessWidget {
+enum _EmployeesTab {
+  employees,
+  workHistory,
+  skills,
+  education,
+  certifications,
+  languages,
+  dependents,
+  contacts,
+  deactivated,
+  archived,
+}
+
+class EmployeesScreen extends StatefulWidget {
   const EmployeesScreen({
     super.key,
     required this.users,
@@ -25,9 +38,43 @@ class EmployeesScreen extends StatelessWidget {
   final void Function(Map<String, dynamic> user) onUserSelected;
 
   @override
+  State<EmployeesScreen> createState() => _EmployeesScreenState();
+}
+
+class _EmployeesScreenState extends State<EmployeesScreen> {
+  _EmployeesTab _activeTab = _EmployeesTab.employees;
+  final _search = TextEditingController();
+  int _selectedIndex = 0;
+  final List<Map<String, String>> _demoEmployees = const [
+    {
+      "name": "test employee",
+      "employeeNumber": "A9132",
+      "email": "test.employee@example.com",
+      "phone": "9876543210",
+      "timezone": "Asia/Kolkata",
+      "department": "Engineering",
+      "jobTitle": "QA Analyst",
+      "manager": "test manager",
+      "nationality": "Indian",
+      "dob": "1998-04-16",
+      "gender": "Male",
+    },
+  ];
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
+    final query = _search.text.trim().toLowerCase();
+    final visible = _demoEmployees.where((e) => e["name"]!.toLowerCase().contains(query)).toList();
+    final selected = visible.isEmpty ? null : visible[_selectedIndex.clamp(0, visible.length - 1)];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -48,37 +95,30 @@ class EmployeesScreen extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: ListView.builder(
-                      itemCount: users.length,
-                      itemBuilder: (context, index) {
-                        final user = users[index] as Map<String, dynamic>;
-                        final profile = (user["profile"] as Map<String, dynamic>? ?? {});
-                        final photoB64 = profile["profilePictureBase64"]?.toString() ?? "";
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage: photoB64.isNotEmpty
-                                ? MemoryImage(base64Decode(photoB64))
-                                : null,
-                            child: photoB64.isEmpty
-                                ? Text(
-                                    (profile["displayName"]?.toString().isNotEmpty ?? false)
-                                        ? profile["displayName"].toString().substring(0, 1).toUpperCase()
-                                        : "U",
-                                  )
-                                : null,
-                          ),
-                          title: Text(profile["displayName"]?.toString().isNotEmpty == true ? profile["displayName"].toString() : user["email"].toString()),
-                          subtitle: Text("${profile["employeeCode"] ?? "-"} | ${user["email"]}"),
-                          onTap: () => onUserSelected(user),
-                        );
-                      },
-                    ),
+                  child: ListView.builder(
+                    itemCount: users.length,
+                    itemBuilder: (context, index) {
+                      final user = users[index] as Map<String, dynamic>;
+                      final profile = (user["profile"] as Map<String, dynamic>? ?? {});
+                      final photoB64 = profile["profilePictureBase64"]?.toString() ?? "";
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: photoB64.isNotEmpty
+                              ? MemoryImage(base64Decode(photoB64))
+                              : null,
+                          child: photoB64.isEmpty
+                              ? Text(
+                                  (profile["displayName"]?.toString().isNotEmpty ?? false)
+                                      ? profile["displayName"].toString().substring(0, 1).toUpperCase()
+                                      : "U",
+                                )
+                              : null,
+                        ),
+                        title: Text(profile["displayName"]?.toString().isNotEmpty == true ? profile["displayName"].toString() : user["email"].toString()),
+                        subtitle: Text("${profile["employeeCode"] ?? "-"} | ${user["email"]}"),
+                        onTap: () => onUserSelected(user),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -115,177 +155,135 @@ class EmployeesScreen extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            padding: const EdgeInsets.all(12),
+            child: _activeTab == _EmployeesTab.employees ? _buildEmployeesMain(selected, visible) : _buildBlankTableForTab(),
+          ),
         ],
       ),
     );
   }
 
-  Future<void> _openCreateUserDialog(BuildContext context) async {
-    final employeeCode = TextEditingController();
-    final firstName = TextEditingController();
-    final lastName = TextEditingController();
-    final email = TextEditingController();
-    final password = TextEditingController(text: "Employee123!");
-    final nationality = TextEditingController();
-    final dob = TextEditingController();
-    final gender = TextEditingController();
-    final maritalStatus = TextEditingController();
-    final jobTitle = TextEditingController();
-    final department = TextEditingController();
-    final manager = TextEditingController();
-    int step = 0;
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text("Employee"),
-          content: SizedBox(
-            width: 700,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: List.generate(
-                    5,
-                    (i) => Expanded(
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 14,
-                            backgroundColor: i <= step ? const Color(0xFF2196F3) : const Color(0xFFE5E7EB),
-                            child: Text("${i + 1}", style: TextStyle(color: i <= step ? Colors.white : Colors.black54, fontSize: 12)),
-                          ),
-                          if (i != 4) const Expanded(child: Divider()),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (step == 0) ...[
-                  _field("Employee Number", employeeCode),
-                  _field("First Name", firstName),
-                  _field("Last Name", lastName),
-                  _field("Email", email),
-                  _field("Password", password),
-                  _field("Nationality", nationality),
-                  _field("Date of Birth", dob),
-                  _field("Gender", gender),
-                  _field("Marital Status", maritalStatus),
-                ] else if (step == 1) ...[
-                  _field("Identification Number", TextEditingController()),
-                ] else if (step == 2) ...[
-                  _field("Job Title", jobTitle),
-                  _field("Department", department),
-                  _field("Manager", manager),
-                ] else if (step == 3) ...[
-                  _field("Phone", TextEditingController()),
-                  _field("Timezone", TextEditingController(text: "Asia/Kolkata")),
-                ] else ...[
-                  const Text("Review and save employee details."),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            if (step > 0)
-              TextButton(
-                onPressed: () => setState(() => step -= 1),
-                child: const Text("Back"),
-              ),
-            ElevatedButton(
-              onPressed: () async {
-                if (step < 4) {
-                  setState(() => step += 1);
-                  return;
-                }
-                await onCreateUser({
-                  "email": email.text.trim(),
-                  "password": password.text,
-                  "displayName": "${firstName.text.trim()} ${lastName.text.trim()}".trim(),
-                  "employeeCode": employeeCode.text.trim(),
-                  "roleNames": ["employee"],
-                  "profile": {
-                    "firstName": firstName.text.trim(),
-                    "lastName": lastName.text.trim(),
-                    "nationality": nationality.text.trim(),
-                    "dateOfBirth": dob.text.trim(),
-                    "gender": gender.text.trim(),
-                    "maritalStatus": maritalStatus.text.trim(),
-                    "jobTitle": jobTitle.text.trim(),
-                    "department": department.text.trim(),
-                    "manager": manager.text.trim(),
-                  }
-                });
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: Text(step < 4 ? "Next" : "Save"),
-            ),
+  Widget _buildEmployeesMain(Map<String, String>? selected, List<Map<String, String>> visible) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            ElevatedButton.icon(onPressed: () {}, icon: const Icon(Icons.send_outlined), label: const Text("Invite an Employee")),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.person_add_alt_1_outlined), label: const Text("Add a New Employee")),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.filter_alt_outlined), label: const Text("Filter Employees")),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<void> _openEditDialog(BuildContext context, Map<String, dynamic> user) async {
-    final profile = (user["profile"] as Map<String, dynamic>? ?? {});
-    final displayName = TextEditingController(text: profile["displayName"]?.toString() ?? "");
-    final department = TextEditingController(text: profile["department"]?.toString() ?? "");
-    final jobTitle = TextEditingController(text: profile["jobTitle"]?.toString() ?? "");
-    final manager = TextEditingController(text: profile["manager"]?.toString() ?? "");
-
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Edit Employee"),
-        content: SizedBox(
-          width: 500,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 620,
+          child: Row(
             children: [
-              _field("Display Name", displayName),
-              _field("Department", department),
-              _field("Job Title", jobTitle),
-              _field("Manager", manager),
+              Container(
+                width: 340,
+                decoration: BoxDecoration(color: Colors.white, border: Border.all(color: const Color(0xFFE5E7EB))),
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _search,
+                      onChanged: (_) => setState(() => _selectedIndex = 0),
+                      decoration: const InputDecoration(
+                        hintText: "Search by Name",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: visible.length,
+                        itemBuilder: (context, index) {
+                          final item = visible[index];
+                          final active = index == _selectedIndex;
+                          return ListTile(
+                            tileColor: active ? const Color(0xFFEFF6FF) : null,
+                            leading: CircleAvatar(child: Text(item["name"]!.substring(0, 1).toUpperCase())),
+                            title: Text(item["name"]!),
+                            subtitle: Text("${item["department"]} | ${item["jobTitle"]}"),
+                            onTap: () => setState(() => _selectedIndex = index),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(color: Colors.white, border: Border.all(color: const Color(0xFFE5E7EB))),
+                  padding: const EdgeInsets.all(14),
+                  child: selected == null
+                      ? const Center(child: Text("No employee selected"))
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(selected["name"]!, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 14),
+                            _line("Employee Number", selected["employeeNumber"]!),
+                            _line("Email", selected["email"]!),
+                            _line("Phone", selected["phone"]!),
+                            _line("Timezone", selected["timezone"]!),
+                            _line("Department", selected["department"]!),
+                            _line("Job Title", selected["jobTitle"]!),
+                            _line("Manager", selected["manager"]!),
+                            _line("Nationality", selected["nationality"]!),
+                            _line("Date of Birth", selected["dob"]!),
+                            _line("Gender", selected["gender"]!),
+                          ],
+                        ),
+                ),
+              ),
             ],
           ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
-              await onUpdateUser(user["_id"].toString(), {
-                "profile": {
-                  "displayName": displayName.text.trim(),
-                  "department": department.text.trim(),
-                  "jobTitle": jobTitle.text.trim(),
-                  "manager": manager.text.trim(),
-                }
-              });
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
-  Widget _field(String label, TextEditingController controller) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: TextField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
+  Widget _line(String k, String v) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text("$k: $v", style: const TextStyle(fontSize: 16)),
+      );
+
+  Widget _buildBlankTableForTab() {
+    final columns = switch (_activeTab) {
+      _EmployeesTab.workHistory => const ["Employee", "Job Title", "Start Date", "End Date", "Department", "Manager", "Employment Status", "Actions"],
+      _EmployeesTab.skills => const ["Employee", "Skill", "Details", "Actions"],
+      _EmployeesTab.education => const ["Employee", "Qualification", "Institute", "Start Date", "Completed On", "Actions"],
+      _EmployeesTab.certifications => const ["Employee", "Certification", "Institute", "Granted On", "Valid Until", "Actions"],
+      _EmployeesTab.languages => const ["Employee", "Language", "Reading", "Speaking", "Writing", "Listening", "Actions"],
+      _EmployeesTab.dependents => const ["Employee", "Name", "Relationship", "Date of Birth", "Id Number", "Actions"],
+      _EmployeesTab.contacts => const ["Employee", "Name", "Relationship", "Home Phone", "Work Phone", "Mobile Phone", "Actions"],
+      _EmployeesTab.deactivated => const ["Employee Number", "First Name", "Last Name", "Department", "Manager", "Actions"],
+      _EmployeesTab.archived => const ["Employee Number", "First Name", "Last Name", "Department", "Manager", "Actions"],
+      _ => const ["Actions"],
+    };
+    return Column(
+      children: [
+        Row(
+          children: [
+            if (_activeTab != _EmployeesTab.deactivated && _activeTab != _EmployeesTab.archived)
+              ElevatedButton.icon(onPressed: () {}, icon: const Icon(Icons.add_circle_outline), label: const Text("Add New")),
+            if (_activeTab != _EmployeesTab.deactivated && _activeTab != _EmployeesTab.archived) const SizedBox(width: 8),
+            OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.filter_alt_outlined), label: const Text("Filters")),
+            const Spacer(),
+            const SizedBox(width: 320, child: TextField(decoration: InputDecoration(hintText: "input search text", border: OutlineInputBorder()))),
+          ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -389,3 +387,4 @@ class _EmployeeDetailCard extends StatelessWidget {
     );
   }
 }
+

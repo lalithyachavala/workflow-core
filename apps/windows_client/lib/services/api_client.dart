@@ -49,6 +49,20 @@ class ApiClient {
     await _tokenStore.clear();
   }
 
+  Future<void> logout() async {
+    final refreshToken = await _tokenStore.getRefreshToken();
+    if (refreshToken != null) {
+      try {
+        await http.post(
+          Uri.parse("$baseUrl/auth/logout"),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"refreshToken": refreshToken}),
+        );
+      } catch (_) {}
+    }
+    await _tokenStore.clear();
+  }
+
   Future<Map<String, dynamic>> fetchCurrentUser() async {
     final json = await _authedGet("/auth/me");
     return (json["user"] ?? {}) as Map<String, dynamic>;
