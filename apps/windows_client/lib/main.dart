@@ -8,6 +8,7 @@ import "screens/documents_screen.dart";
 import "screens/employees_screen.dart";
 import "screens/face_verification_login_screen.dart";
 import "screens/home_screen.dart";
+import "screens/inactivities_screen.dart";
 import "screens/insights_attendance_screen.dart";
 import "screens/job_details_setup_screen.dart";
 import "screens/login_screen.dart";
@@ -299,10 +300,10 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
-  Future<void> _clockIn(String imageBase64) async {
+  Future<void> _clockIn(List<double> embedding) async {
     setState(() => _loading = true);
     try {
-      await _api.clockIn(imageBase64);
+      await _api.clockIn(embedding);
       await _refresh();
     } catch (e) {
       if (mounted) {
@@ -319,10 +320,10 @@ class _AppRootState extends State<AppRoot> {
     await _api.reportAwayAlert();
   }
 
-  Future<void> _clockOut(String imageBase64) async {
+  Future<void> _clockOut(List<double> embedding) async {
     setState(() => _loading = true);
     try {
-      await _api.clockOut(imageBase64);
+      await _api.clockOut(embedding);
       await _refresh();
     } catch (e) {
       if (mounted) {
@@ -414,6 +415,7 @@ class _AppRootState extends State<AppRoot> {
               items: [
                 ModernNavItem(keyName: "manage_documents", label: "Documents", icon: Icons.description_outlined),
                 ModernNavItem(keyName: "employees_attendance", label: "Attendance", icon: Icons.schedule_outlined),
+                ModernNavItem(keyName: "admin_inactivities", label: "Inactivities", icon: Icons.timer_off_outlined),
                 ModernNavItem(keyName: "manage_travel", label: "Travel", icon: Icons.flight_outlined),
                 ModernNavItem(keyName: "manage_overtime", label: "Overtime", icon: Icons.more_time_outlined),
               ],
@@ -649,6 +651,15 @@ class _AppRootState extends State<AppRoot> {
         return const SystemPermissionsScreen();
       case "system_fields":
         return const SystemFieldNamesScreen();
+      case "admin_inactivities":
+        if (_isAdmin) {
+          return InactivitiesScreen(
+            awayAlerts: _awayAlerts,
+            loading: _loading,
+            onRefresh: _refresh,
+          );
+        }
+        return _placeholderPanel("Inactivities", "Admin only.");
       case "employees_attendance":
         if (_isAdmin) {
           return const AdminAttendanceScreen();

@@ -72,12 +72,12 @@ class ApiClient {
     return (json["user"] ?? {}) as Map<String, dynamic>;
   }
 
-  Future<void> clockIn(String imageBase64) async {
-    await _clock("/attendance/clock-in", imageBase64);
+  Future<void> clockIn(List<double> embedding) async {
+    await _clock("/attendance/clock-in", embedding);
   }
 
-  Future<void> clockOut(String imageBase64) async {
-    await _clock("/attendance/clock-out", imageBase64);
+  Future<void> clockOut(List<double> embedding) async {
+    await _clock("/attendance/clock-out", embedding);
   }
 
   Future<Map<String, dynamic>> fetchToday() async {
@@ -180,17 +180,17 @@ class ApiClient {
     await _authedDelete("/admin/company-structures/$id");
   }
 
-  Future<void> _clock(String path, String imageBase64) async {
-    final payload = await _buildClockPayload(imageBase64);
+  Future<void> _clock(String path, List<double> embedding) async {
+    final payload = await _buildClockPayload(embedding);
     await _authedPost(path, payload.toJson());
   }
 
-  Future<ClockPayload> _buildClockPayload(String imageBase64) async {
+  Future<ClockPayload> _buildClockPayload(List<double> embedding) async {
     final windows = await DeviceInfoPlugin().windowsInfo;
     final packageInfo = await PackageInfo.fromPlatform();
 
     return ClockPayload(
-      imageBase64: imageBase64,
+      embedding: embedding,
       deviceFingerprint: windows.deviceId,
       hostname: windows.computerName,
       osVersion: windows.displayVersion,

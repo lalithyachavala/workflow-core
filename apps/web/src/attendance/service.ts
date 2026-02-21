@@ -1,7 +1,25 @@
-import geoip from "geoip-lite";
 import { AttendanceEvent, Device, WorkSession } from "@/src/db/models";
 import { env } from "@/src/lib/env";
 import { computeTotalSeconds } from "@/src/attendance/math";
+
+/** Lazy-loaded to avoid Turbopack/bundler breaking geoip-lite's __dirname-based data path. */
+function getGeoFromIp(ip: string): { country: string; city: string; ll: number[] } {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const geoip = require("geoip-lite");
+    const lookup = geoip.lookup(ip);
+    if (!lookup) {
+      return { country: env.geoFallbackCountry, city: "", ll: [] };
+    }
+    return {
+      country: lookup.country || env.geoFallbackCountry,
+      city: lookup.city || "",
+      ll: lookup.ll || [],
+    };
+  } catch {
+    return { country: env.geoFallbackCountry, city: "", ll: [] };
+  }
+}
 
 export async function registerDevice(params: {
   userId: string;
@@ -20,18 +38,6 @@ export async function registerDevice(params: {
   );
 }
 
-function geoFromIp(ip: string) {
-  const lookup = geoip.lookup(ip);
-  if (!lookup) {
-    return { country: env.geoFallbackCountry, city: "", ll: [] as number[] };
-  }
-
-  return {
-    country: lookup.country || env.geoFallbackCountry,
-    city: lookup.city || "",
-    ll: lookup.ll || [],
-  };
-}
 
 export async function clockIn(params: {
   userId: string;
@@ -61,7 +67,7 @@ export async function clockIn(params: {
     type: "clockIn",
     timestamp: now,
     ip: params.ip,
-    geo: geoFromIp(params.ip),
+    geo: getGeoFromIp(params.ip),
     deviceId: params.deviceId,
     faceScore: params.faceScore,
     verificationStatus: params.verificationStatus,
@@ -96,7 +102,7 @@ export async function clockOut(params: {
     type: "clockOut",
     timestamp: now,
     ip: params.ip,
-    geo: geoFromIp(params.ip),
+    geo: getGeoFromIp(params.ip),
     deviceId: params.deviceId,
     faceScore: params.faceScore,
     verificationStatus: params.verificationStatus,

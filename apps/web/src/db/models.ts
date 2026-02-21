@@ -123,6 +123,7 @@ const awayAlertSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     employeeEmail: { type: String, required: true },
+    employeeName: { type: String, default: "" },
     awayAt: { type: Date, required: true, default: () => new Date() },
     minutesAway: { type: Number, required: true, default: 15 },
   },
