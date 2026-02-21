@@ -48,8 +48,9 @@ class FaceDetectorService {
       throw Exception("Input name could not be determined. Please verify your ONNX model.");
     }
 
-    final int targetWidth = 320; // Depending on what YuNet or your specific HF export expects.
-    final int targetHeight = 320; 
+    // This YuNet variant expects 640x640 input (model fixed input shape).
+    final int targetWidth = 640;
+    final int targetHeight = 640; 
 
     // 1. Resize the camera frame down to what the model expects
     var resizedImage = img.copyResize(imageFrame, width: targetWidth, height: targetHeight);
@@ -98,8 +99,41 @@ class FaceDetectorService {
       element?.release();
     }
 
-    // Placeholder: Process `outputs` and extract faces based on the threshold.
-    return []; 
+    // Placeholder: YuNet NMS not implemented. Returns empty; callers use center crop.
+    return [];
+  }
+
+  /// Crops face ROI from image for ArcFace input.
+  /// Uses detectFace bbox if available; otherwise center crop to square then resize 112x112.
+  Future<img.Image> cropFaceForArcFace(img.Image image) async {
+    const size = 112;
+    final w = image.width;
+    final h = image.height;
+    if (w < 1 || h < 1) throw Exception("Invalid image size");
+    img.Image cropped;
+    final detections = await detectFace(image);
+    if (detections.isNotEmpty && detections[0] is Map) {
+      final d = detections[0] as Map;
+      final x = (d["x"] as num?)?.toInt() ?? 0;
+      final y = (d["y"] as num?)?.toInt() ?? 0;
+      final bw = (d["width"] as num?)?.toInt() ?? w;
+      final bh = (d["height"] as num?)?.toInt() ?? h;
+      final x1 = x.clamp(0, w - 1);
+      final y1 = y.clamp(0, h - 1);
+      final x2 = (x + bw).clamp(0, w);
+      final y2 = (y + bh).clamp(0, h);
+      cropped = img.copyCrop(image, x: x1, y: y1, width: x2 - x1, height: y2 - y1);
+    } else {
+      // Center square crop
+      final side = w < h ? w : h;
+      final cx = w ~/ 2;
+      final cy = h ~/ 2;
+      final half = side ~/ 2;
+      final x1 = (cx - half).clamp(0, w - side);
+      final y1 = (cy - half).clamp(0, h - side);
+      cropped = img.copyCrop(image, x: x1, y: y1, width: side, height: side);
+    }
+    return img.copyResize(cropped, width: size, height: size);
   }
 
   void dispose() {

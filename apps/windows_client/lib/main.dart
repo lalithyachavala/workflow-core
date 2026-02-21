@@ -106,12 +106,12 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
-  Future<void> _verifyFaceForLogin(String imageBase64) async {
-    await _api.verifyFaceForLogin(imageBase64);
+  Future<void> _verifyFaceForLogin(List<double> embedding) async {
+    await _api.verifyFaceForLogin(embedding);
   }
 
-  Future<void> _enrollMyFace(String imageBase64) async {
-    await _api.enrollMyFace(imageBase64);
+  Future<void> _enrollMyFace(List<double> embedding, String pose, {String? profileImageBase64}) async {
+    await _api.enrollMyFace(embedding, pose, profileImageBase64: profileImageBase64);
   }
 
   void _onFaceVerified() {

@@ -64,9 +64,16 @@ const deviceSchema = new Schema(
 const faceTemplateSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
-    embeddingVector: [{ type: Number, required: true }],
-    version: { type: Number, default: 1 },
+    /** Encrypted embeddings per pose (AES-GCM). front, left, right. */
+    embeddingFront: { type: String, default: null },
+    embeddingLeft: { type: String, default: null },
+    embeddingRight: { type: String, default: null },
+    /** Model version for embedding compatibility. */
+    modelVersion: { type: Number, default: 1 },
     status: { type: String, default: "active" },
+    /** @deprecated legacy single embedding - migrate to embeddingFront/Left/Right */
+    embeddingVector: [{ type: Number }],
+    version: { type: Number, default: 1 },
   },
   { timestamps: true },
 );

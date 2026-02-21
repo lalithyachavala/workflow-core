@@ -5,4 +5,6 @@ export const env = {
   accessTokenTtlMinutes: Number(process.env.ACCESS_TOKEN_TTL_MINUTES || "15"),
   refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS || "30"),
   geoFallbackCountry: process.env.GEOIP_FALLBACK_COUNTRY || "Unknown",
+  /** 32-byte hex key for AES-GCM embedding encryption. Generate: openssl rand -hex 32 */
+  faceEmbeddingKey: process.env.FACE_EMBEDDING_KEY || "0000000000000000000000000000000000000000000000000000000000000000",
 };

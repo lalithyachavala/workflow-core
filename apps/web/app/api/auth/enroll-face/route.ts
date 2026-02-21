@@ -5,7 +5,9 @@ import { requireAuth } from "@/src/lib/request-auth";
 import { enrollFace } from "@/src/biometric/face";
 
 const bodySchema = z.object({
-  imageBase64: z.string().min(20),
+  embedding: z.array(z.number()).length(512),
+  pose: z.enum(["front", "left", "right"]),
+  profileImageBase64: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -20,6 +22,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Invalid payload." }, { status: 400 });
   }
 
-  await enrollFace(user.sub, parsed.data.imageBase64);
-  return NextResponse.json({ ok: true });
+  try {
+    await enrollFace(
+      user.sub,
+      parsed.data.embedding,
+      parsed.data.pose,
+      parsed.data.profileImageBase64,
+    );
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Face enrollment failed.";
+    return NextResponse.json({ ok: false, message }, { status: 400 });
+  }
 }

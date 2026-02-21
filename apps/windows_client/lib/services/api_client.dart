@@ -31,15 +31,19 @@ class ApiClient {
     return (json["hasTemplate"] ?? false) as bool;
   }
 
-  Future<void> verifyFaceForLogin(String imageBase64) async {
-    final json = await _authedPost("/auth/verify-face", {"imageBase64": imageBase64});
+  Future<void> verifyFaceForLogin(List<double> embedding) async {
+    final json = await _authedPost("/auth/verify-face", {"embedding": embedding});
     if (json["ok"] != true) {
       throw Exception(json["message"] ?? "Face verification failed.");
     }
   }
 
-  Future<void> enrollMyFace(String imageBase64) async {
-    final json = await _authedPost("/auth/enroll-face", {"imageBase64": imageBase64});
+  Future<void> enrollMyFace(List<double> embedding, String pose, {String? profileImageBase64}) async {
+    final body = <String, dynamic>{"embedding": embedding, "pose": pose};
+    if (profileImageBase64 != null && profileImageBase64.isNotEmpty) {
+      body["profileImageBase64"] = profileImageBase64;
+    }
+    final json = await _authedPost("/auth/enroll-face", body);
     if (json["ok"] != true) {
       throw Exception(json["message"] ?? "Face enrollment failed.");
     }

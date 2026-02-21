@@ -67,6 +67,109 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     super.dispose();
   }
 
+  Future<void> _openCreateUserDialog(BuildContext context) async {
+    final email = TextEditingController();
+    final password = TextEditingController();
+    final displayName = TextEditingController();
+    final employeeCode = TextEditingController();
+    final roleNames = TextEditingController(text: "employee");
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Add a New Employee"),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: email, decoration: const InputDecoration(labelText: "Email", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: displayName, decoration: const InputDecoration(labelText: "Display Name", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: employeeCode, decoration: const InputDecoration(labelText: "Employee Code", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: roleNames, decoration: const InputDecoration(labelText: "Roles (comma-separated)", border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              await widget.onCreateUser({
+                "email": email.text.trim(),
+                "password": password.text.trim(),
+                "displayName": displayName.text.trim(),
+                "employeeCode": employeeCode.text.trim(),
+                "roleNames": roleNames.text.trim().split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+              });
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openEditDialog(BuildContext context, Map<String, dynamic> user) async {
+    final profile = user["profile"] as Map<String, dynamic>? ?? {};
+    final displayName = TextEditingController(text: profile["displayName"]?.toString() ?? "");
+    final employeeCode = TextEditingController(text: profile["employeeCode"]?.toString() ?? "");
+    final department = TextEditingController(text: profile["department"]?.toString() ?? "");
+    final jobTitle = TextEditingController(text: profile["jobTitle"]?.toString() ?? "");
+    final manager = TextEditingController(text: profile["manager"]?.toString() ?? "");
+    final timezone = TextEditingController(text: profile["timezone"]?.toString() ?? "Asia/Kolkata");
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Edit Employee"),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: displayName, decoration: const InputDecoration(labelText: "Display Name", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: employeeCode, decoration: const InputDecoration(labelText: "Employee Code", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: department, decoration: const InputDecoration(labelText: "Department", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: jobTitle, decoration: const InputDecoration(labelText: "Job Title", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: manager, decoration: const InputDecoration(labelText: "Manager", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: timezone, decoration: const InputDecoration(labelText: "Timezone", border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              await widget.onUpdateUser(user["_id"].toString(), {
+                "profile": {
+                  "displayName": displayName.text.trim(),
+                  "employeeCode": employeeCode.text.trim(),
+                  "department": department.text.trim(),
+                  "jobTitle": jobTitle.text.trim(),
+                  "manager": manager.text.trim(),
+                  "timezone": timezone.text.trim(),
+                },
+              });
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = _search.text.trim().toLowerCase();
@@ -80,14 +183,14 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         children: [
           Row(
             children: [
-              if (isAdmin)
+              if (widget.isAdmin)
                 ElevatedButton.icon(
                   onPressed: () => _openCreateUserDialog(context),
                   icon: const Icon(Icons.add),
                   label: const Text("Add a New Employee"),
                 ),
-              if (isAdmin) const SizedBox(width: 10),
-              OutlinedButton(onPressed: onRefresh, child: const Text("Refresh")),
+              if (widget.isAdmin) const SizedBox(width: 10),
+              OutlinedButton(onPressed: widget.onRefresh, child: const Text("Refresh")),
             ],
           ),
           const SizedBox(height: 12),
@@ -96,9 +199,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               children: [
                 Expanded(
                   child: ListView.builder(
-                    itemCount: users.length,
+                    itemCount: widget.users.length,
                     itemBuilder: (context, index) {
-                      final user = users[index] as Map<String, dynamic>;
+                      final user = widget.users[index] as Map<String, dynamic>;
                       final profile = (user["profile"] as Map<String, dynamic>? ?? {});
                       final photoB64 = profile["profilePictureBase64"]?.toString() ?? "";
                       return ListTile(
@@ -116,7 +219,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                         ),
                         title: Text(profile["displayName"]?.toString().isNotEmpty == true ? profile["displayName"].toString() : user["email"].toString()),
                         subtitle: Text("${profile["employeeCode"] ?? "-"} | ${user["email"]}"),
-                        onTap: () => onUserSelected(user),
+                        onTap: () => widget.onUserSelected(user),
                       );
                     },
                   ),
@@ -130,15 +233,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       border: Border.all(color: const Color(0xFFE5E7EB)),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: users.isEmpty
+                    child: widget.users.isEmpty
                         ? const Center(child: Text("No employees found"))
-                        : selectedUser != null
+                        : widget.selectedUser != null
                             ? _EmployeeDetailCard(
-                                user: selectedUser!,
-                                attendance: selectedUserAttendance,
-                                isAdmin: isAdmin,
-                                onEdit: () => _openEditDialog(context, selectedUser!),
-                                onRefresh: onRefresh,
+                                user: widget.selectedUser!,
+                                attendance: widget.selectedUserAttendance,
+                                isAdmin: widget.isAdmin,
+                                onEdit: () => _openEditDialog(context, widget.selectedUser!),
+                                onRefresh: widget.onRefresh,
                               )
                             : Center(
                                 child: Column(

@@ -11,5 +11,10 @@ export async function GET(req: NextRequest) {
   }
 
   const template = await FaceTemplate.findOne({ userId: user.sub }).lean();
-  return NextResponse.json({ hasTemplate: !!(template?.embeddingVector?.length) });
+  // Only consider new 3-pose embeddings as having a template (legacy SHA256 template is not used for verify).
+  const hasTemplate =
+    (template?.embeddingFront && typeof template.embeddingFront === "string") ||
+    (template?.embeddingLeft && typeof template.embeddingLeft === "string") ||
+    (template?.embeddingRight && typeof template.embeddingRight === "string");
+  return NextResponse.json({ hasTemplate: !!hasTemplate });
 }
