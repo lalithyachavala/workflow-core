@@ -1,4 +1,6 @@
+import "dart:convert";
 import "package:flutter/material.dart";
+import "../widgets/attendance_bar_chart.dart";
 
 enum _EmployeesTab {
   employees,
@@ -17,15 +19,23 @@ class EmployeesScreen extends StatefulWidget {
   const EmployeesScreen({
     super.key,
     required this.users,
+    required this.selectedUser,
+    required this.selectedUserAttendance,
+    required this.isAdmin,
     required this.onRefresh,
     required this.onCreateUser,
     required this.onUpdateUser,
+    required this.onUserSelected,
   });
 
   final List<dynamic> users;
+  final bool isAdmin;
+  final Map<String, dynamic>? selectedUser;
+  final Map<String, dynamic> selectedUserAttendance;
   final Future<void> Function() onRefresh;
-  final Future<void> Function(Map<String, dynamic> payload) onCreateUser;
-  final Future<void> Function(String userId, Map<String, dynamic> payload) onUpdateUser;
+  final Future<void> Function(Map<String, dynamic>) onCreateUser;
+  final Future<void> Function(String userId, Map<String, dynamic>) onUpdateUser;
+  final void Function(Map<String, dynamic> user) onUserSelected;
 
   @override
   State<EmployeesScreen> createState() => _EmployeesScreenState();
@@ -57,6 +67,109 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     super.dispose();
   }
 
+  Future<void> _openCreateUserDialog(BuildContext context) async {
+    final email = TextEditingController();
+    final password = TextEditingController();
+    final displayName = TextEditingController();
+    final employeeCode = TextEditingController();
+    final roleNames = TextEditingController(text: "employee");
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Add a New Employee"),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: email, decoration: const InputDecoration(labelText: "Email", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: displayName, decoration: const InputDecoration(labelText: "Display Name", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: employeeCode, decoration: const InputDecoration(labelText: "Employee Code", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: roleNames, decoration: const InputDecoration(labelText: "Roles (comma-separated)", border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              await widget.onCreateUser({
+                "email": email.text.trim(),
+                "password": password.text.trim(),
+                "displayName": displayName.text.trim(),
+                "employeeCode": employeeCode.text.trim(),
+                "roleNames": roleNames.text.trim().split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+              });
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openEditDialog(BuildContext context, Map<String, dynamic> user) async {
+    final profile = user["profile"] as Map<String, dynamic>? ?? {};
+    final displayName = TextEditingController(text: profile["displayName"]?.toString() ?? "");
+    final employeeCode = TextEditingController(text: profile["employeeCode"]?.toString() ?? "");
+    final department = TextEditingController(text: profile["department"]?.toString() ?? "");
+    final jobTitle = TextEditingController(text: profile["jobTitle"]?.toString() ?? "");
+    final manager = TextEditingController(text: profile["manager"]?.toString() ?? "");
+    final timezone = TextEditingController(text: profile["timezone"]?.toString() ?? "Asia/Kolkata");
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Edit Employee"),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: displayName, decoration: const InputDecoration(labelText: "Display Name", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: employeeCode, decoration: const InputDecoration(labelText: "Employee Code", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: department, decoration: const InputDecoration(labelText: "Department", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: jobTitle, decoration: const InputDecoration(labelText: "Job Title", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: manager, decoration: const InputDecoration(labelText: "Manager", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: timezone, decoration: const InputDecoration(labelText: "Timezone", border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              await widget.onUpdateUser(user["_id"].toString(), {
+                "profile": {
+                  "displayName": displayName.text.trim(),
+                  "employeeCode": employeeCode.text.trim(),
+                  "department": department.text.trim(),
+                  "jobTitle": jobTitle.text.trim(),
+                  "manager": manager.text.trim(),
+                  "timezone": timezone.text.trim(),
+                },
+              });
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = _search.text.trim().toLowerCase();
@@ -68,36 +181,81 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          Row(
+            children: [
+              if (widget.isAdmin)
+                ElevatedButton.icon(
+                  onPressed: () => _openCreateUserDialog(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text("Add a New Employee"),
+                ),
+              if (widget.isAdmin) const SizedBox(width: 10),
+              OutlinedButton(onPressed: widget.onRefresh, child: const Text("Refresh")),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
             child: Row(
-              children: _EmployeesTab.values.map((tab) {
-                final title = switch (tab) {
-                  _EmployeesTab.employees => "Employees",
-                  _EmployeesTab.workHistory => "Work History",
-                  _EmployeesTab.skills => "Skills",
-                  _EmployeesTab.education => "Education",
-                  _EmployeesTab.certifications => "Certifications",
-                  _EmployeesTab.languages => "Languages",
-                  _EmployeesTab.dependents => "Dependents",
-                  _EmployeesTab.contacts => "Contacts",
-                  _EmployeesTab.deactivated => "Deactivated",
-                  _EmployeesTab.archived => "Archived",
-                };
-                return InkWell(
-                  onTap: () => setState(() => _activeTab = tab),
-                  child: Container(
-                    height: 50,
-                    padding: const EdgeInsets.symmetric(horizontal: 22),
-                    decoration: BoxDecoration(
-                      color: _activeTab == tab ? const Color(0xFFF8FAFC) : Colors.transparent,
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(title, style: const TextStyle(fontSize: 16)),
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: widget.users.length,
+                    itemBuilder: (context, index) {
+                      final user = widget.users[index] as Map<String, dynamic>;
+                      final profile = (user["profile"] as Map<String, dynamic>? ?? {});
+                      final photoB64 = profile["profilePictureBase64"]?.toString() ?? "";
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: photoB64.isNotEmpty
+                              ? MemoryImage(base64Decode(photoB64))
+                              : null,
+                          child: photoB64.isEmpty
+                              ? Text(
+                                  (profile["displayName"]?.toString().isNotEmpty ?? false)
+                                      ? profile["displayName"].toString().substring(0, 1).toUpperCase()
+                                      : "U",
+                                )
+                              : null,
+                        ),
+                        title: Text(profile["displayName"]?.toString().isNotEmpty == true ? profile["displayName"].toString() : user["email"].toString()),
+                        subtitle: Text("${profile["employeeCode"] ?? "-"} | ${user["email"]}"),
+                        onTap: () => widget.onUserSelected(user),
+                      );
+                    },
                   ),
-                );
-              }).toList(),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: widget.users.isEmpty
+                        ? const Center(child: Text("No employees found"))
+                        : widget.selectedUser != null
+                            ? _EmployeeDetailCard(
+                                user: widget.selectedUser!,
+                                attendance: widget.selectedUserAttendance,
+                                isAdmin: widget.isAdmin,
+                                onEdit: () => _openEditDialog(context, widget.selectedUser!),
+                                onRefresh: widget.onRefresh,
+                              )
+                            : Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.person_outline, size: 48, color: Color(0xFF9CA3AF)),
+                                    const SizedBox(height: 12),
+                                    const Text("Select an employee to view details and attendance"),
+                                  ],
+                                ),
+                              ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 10),
@@ -228,23 +386,107 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             const SizedBox(width: 320, child: TextField(decoration: InputDecoration(hintText: "input search text", border: OutlineInputBorder()))),
           ],
         ),
-        const SizedBox(height: 10),
-        Container(
-          height: 380,
-          width: double.infinity,
-          decoration: BoxDecoration(color: Colors.white, border: Border.all(color: const Color(0xFFE5E7EB))),
-          child: Column(
+      ],
+    );
+  }
+}
+
+class _EmployeeDetailCard extends StatelessWidget {
+  const _EmployeeDetailCard({
+    required this.user,
+    required this.attendance,
+    required this.isAdmin,
+    required this.onEdit,
+    required this.onRefresh,
+  });
+  final Map<String, dynamic> user;
+  final Map<String, dynamic> attendance;
+  final bool isAdmin;
+  final VoidCallback onEdit;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = (user["profile"] as Map<String, dynamic>? ?? {});
+    final hoursByDay = (attendance["hoursByDay"] as List<dynamic>? ?? []);
+    final sessions = (attendance["sessions"] as List<dynamic>? ?? []);
+    final photoB64 = profile["profilePictureBase64"]?.toString() ?? "";
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Container(
-                color: const Color(0xFFF3F4F6),
-                padding: const EdgeInsets.all(12),
-                child: Row(children: columns.map((c) => Expanded(child: Text(c, style: const TextStyle(fontWeight: FontWeight.w700)))).toList()),
+              CircleAvatar(
+                radius: 28,
+                backgroundImage: photoB64.isNotEmpty ? MemoryImage(base64Decode(photoB64)) : null,
+                child: photoB64.isEmpty
+                    ? Text(
+                        (profile["displayName"]?.toString().isNotEmpty ?? false)
+                            ? profile["displayName"].toString().substring(0, 1).toUpperCase()
+                            : "?",
+                        style: const TextStyle(fontSize: 24),
+                      )
+                    : null,
               ),
-              const Expanded(child: Center(child: Text("No data", style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 24)))),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile["displayName"]?.toString().isNotEmpty == true
+                          ? profile["displayName"].toString()
+                          : user["email"].toString(),
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+              if (isAdmin)
+                OutlinedButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit, size: 16),
+                  label: const Text("Edit"),
+                ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 6),
+          Text("Employee Number: ${profile["employeeCode"] ?? "-"}"),
+          Text("Email: ${user["email"]}"),
+          Text("Timezone: ${profile["timezone"] ?? "Asia/Kolkata"}"),
+          const SizedBox(height: 16),
+          const Text("Basic Information", style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text("Department: ${profile["department"] ?? "-"}"),
+          Text("Job Title: ${profile["jobTitle"] ?? "-"}"),
+          Text("Manager: ${profile["manager"] ?? "-"}"),
+          Text("Nationality: ${profile["nationality"] ?? "-"}"),
+          const SizedBox(height: 24),
+          const Text("Attendance (Hours by Day)", style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          AttendanceBarChart(
+            hoursByDay: hoursByDay,
+            title: "Hours Worked - Last 30 Days",
+            chartHeight: 180,
+          ),
+          const SizedBox(height: 24),
+          const Text("Recent Sessions", style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          if (sessions.isEmpty)
+            const Text("No sessions")
+          else
+            ...sessions.take(15).map((s) => ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text("In: ${s["clockInAt"] ?? "-"}"),
+              subtitle: Text("Out: ${s["clockOutAt"] ?? "-"}"),
+              trailing: Text("${(s["totalSeconds"] ?? 0)}s"),
+            )),
+        ],
+      ),
     );
   }
 }

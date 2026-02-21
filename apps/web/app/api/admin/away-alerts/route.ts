@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectMongo } from "@/src/lib/mongodb";
 import { requirePermission } from "@/src/lib/request-auth";
-import { AttendanceEvent } from "@/src/db/models";
+import { AwayAlert } from "@/src/db/models";
 
 export async function GET(req: NextRequest) {
   await connectMongo();
@@ -10,12 +10,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "Forbidden." }, { status: 403 });
   }
 
-  const events = await AttendanceEvent.find()
-    .sort({ timestamp: -1 })
-    .limit(100)
-    .populate("userId", "email profile")
-    .populate("deviceId", "hostname osVersion appVersion deviceFingerprint")
+  const alerts = await AwayAlert.find()
+    .sort({ awayAt: -1 })
+    .limit(50)
     .lean();
 
-  return NextResponse.json({ events });
+  return NextResponse.json({ alerts });
 }

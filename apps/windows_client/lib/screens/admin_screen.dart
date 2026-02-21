@@ -6,6 +6,7 @@ class AdminScreen extends StatelessWidget {
     required this.loading,
     required this.roles,
     required this.events,
+    required this.awayAlerts,
     required this.onRefresh,
     required this.onCreateRole,
     required this.onCreateUser,
@@ -15,6 +16,7 @@ class AdminScreen extends StatelessWidget {
   final bool loading;
   final List<dynamic> roles;
   final List<dynamic> events;
+  final List<dynamic> awayAlerts;
   final Future<void> Function() onRefresh;
   final Future<void> Function(String name, String description, List<String> permissions) onCreateRole;
   final Future<void> Function(Map<String, dynamic> payload) onCreateUser;
@@ -150,12 +152,58 @@ class AdminScreen extends StatelessWidget {
                 subtitle: Text((role["permissions"] as List<dynamic>? ?? []).join(", ")),
               )),
           const SizedBox(height: 12),
-          const Text("Recent Attendance Events", style: TextStyle(fontWeight: FontWeight.w600)),
+          if (awayAlerts.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber, color: Colors.orange.shade800),
+                      const SizedBox(width: 8),
+                      Text("Employees Away > 15 min", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...awayAlerts.take(10).map((a) => ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(a["employeeEmail"]?.toString() ?? "-"),
+                    subtitle: Text(a["awayAt"]?.toString() ?? "-"),
+                  )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          const Text("Recent Attendance Events (IP & Device)", style: TextStyle(fontWeight: FontWeight.w600)),
           ...events.take(20).map(
-                (event) => ListTile(
-                  title: Text("${event["type"] ?? "-"} | ${event["ip"] ?? "-"}"),
-                  subtitle: Text(event["timestamp"]?.toString() ?? "-"),
-                ),
+                (event) {
+                  final user = event["userId"] as Map<String, dynamic>?;
+                  final profile = user?["profile"] as Map<String, dynamic>?;
+                  final email = user?["email"] ?? profile?["displayName"] ?? "-";
+                  final device = event["deviceId"] as Map<String, dynamic>?;
+                  final hostname = device?["hostname"] ?? "-";
+                  final osVersion = device?["osVersion"] ?? "";
+                  final geo = event["geo"] as Map<String, dynamic>?;
+                  final geoStr = geo != null && (geo["country"]?.toString().isNotEmpty == true)
+                      ? "${geo["country"]}${geo["city"] != null && geo["city"].toString().isNotEmpty ? ", ${geo["city"]}" : ""}"
+                      : "";
+                  return ListTile(
+                    title: Text("${event["type"] ?? "-"} | $email"),
+                    subtitle: Text(
+                      "IP: ${event["ip"] ?? "-"}${geoStr.isNotEmpty ? " | $geoStr" : ""}\n"
+                      "Device: $hostname${osVersion.toString().isNotEmpty ? " ($osVersion)" : ""}",
+                    ),
+                    isThreeLine: true,
+                  );
+                },
               ),
         ],
       ),

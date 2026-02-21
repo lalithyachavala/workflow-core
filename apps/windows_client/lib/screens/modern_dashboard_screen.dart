@@ -1,12 +1,21 @@
 import "package:flutter/material.dart";
+import "../widgets/attendance_bar_chart.dart";
 
 class ModernDashboardScreen extends StatelessWidget {
   const ModernDashboardScreen({
     super.key,
     required this.metrics,
+    required this.events,
+    required this.awayAlerts,
+    required this.hoursByDay,
+    required this.onRefresh,
   });
 
   final Map<String, dynamic> metrics;
+  final List<dynamic> events;
+  final List<dynamic> awayAlerts;
+  final List<dynamic> hoursByDay;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -22,24 +31,55 @@ class ModernDashboardScreen extends StatelessWidget {
                 children: [
                   Text("Dashboard", style: TextStyle(fontSize: 31, fontWeight: FontWeight.w700)),
                   SizedBox(height: 2),
-                  Text("Thursday, 20 February 2026", style: TextStyle(color: Color(0xFF6B7280))),
+                  Text("Admin Overview", style: TextStyle(color: Color(0xFF6B7280))),
                 ],
               ),
               const Spacer(),
-              ElevatedButton.icon(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.download, size: 16),
-                label: const Text("Download Report"),
+              OutlinedButton.icon(
+                onPressed: () => onRefresh(),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text("Refresh"),
               ),
             ],
           ),
           const SizedBox(height: 16),
+          if (awayAlerts.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber, color: Colors.orange.shade800, size: 24),
+                      const SizedBox(width: 8),
+                      Text("Employees Away > 15 min", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ...awayAlerts.take(10).map((a) => ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.person_off, size: 20),
+                    title: Text(a["employeeEmail"]?.toString() ?? "-"),
+                    subtitle: Text("Away since: ${a["awayAt"]?.toString() ?? "-"}"),
+                  )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          AttendanceBarChart(
+            hoursByDay: hoursByDay,
+            title: "My Hours Worked (Last 30 Days)",
+            chartHeight: 160,
+          ),
+          const SizedBox(height: 20),
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -54,12 +94,61 @@ class ModernDashboardScreen extends StatelessWidget {
               _MetricCard(title: "Pending Leaves", value: "${metrics["pendingLeaves"] ?? 0}", note: "awaiting review", noteColor: const Color(0xFF6B7280)),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
-            children: const [
-              Expanded(child: _Panel(title: "Today's Activity", child: _ListPlaceholder())),
-              SizedBox(width: 10),
-              Expanded(child: _Panel(title: "Pending Approvals", child: _ListPlaceholder())),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 2,
+                child: _Panel(
+                  title: "Recent Attendance (IP & Device)",
+                  child: events.isEmpty
+                      ? const Padding(padding: EdgeInsets.all(16), child: Center(child: Text("No attendance events")))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: events.length > 15 ? 15 : events.length,
+                          itemBuilder: (context, index) {
+                            final event = events[index] as Map<String, dynamic>;
+                            final user = event["userId"] as Map<String, dynamic>?;
+                            final profile = user?["profile"] as Map<String, dynamic>?;
+                            final email = user?["email"] ?? profile?["displayName"] ?? "-";
+                            final device = event["deviceId"] as Map<String, dynamic>?;
+                            final hostname = device?["hostname"] ?? "-";
+                            final geo = event["geo"] as Map<String, dynamic>?;
+                            final geoStr = geo != null && (geo["country"]?.toString().isNotEmpty == true)
+                                ? "${geo["country"]}${geo["city"] != null && geo["city"].toString().isNotEmpty ? ", ${geo["city"]}" : ""}"
+                                : "";
+                            return ListTile(
+                              dense: true,
+                              title: Text("${event["type"] ?? "-"} | $email"),
+                              subtitle: Text("IP: ${event["ip"] ?? "-"}${geoStr.isNotEmpty ? " | $geoStr" : ""}\nDevice: $hostname"),
+                              isThreeLine: true,
+                            );
+                          },
+                        ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _Panel(
+                  title: "Away Alerts",
+                  child: awayAlerts.isEmpty
+                      ? const Padding(padding: EdgeInsets.all(16), child: Center(child: Text("No away alerts")))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: awayAlerts.length > 10 ? 10 : awayAlerts.length,
+                          itemBuilder: (context, index) {
+                            final a = awayAlerts[index] as Map<String, dynamic>;
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.warning_amber, size: 18, color: Colors.orange),
+                              title: Text(a["employeeEmail"]?.toString() ?? "-"),
+                              subtitle: Text(a["awayAt"]?.toString() ?? "-"),
+                            );
+                          },
+                        ),
+                ),
+              ),
             ],
           ),
         ],

@@ -8,6 +8,7 @@ const userSchema = new Schema(
     isActive: { type: Boolean, default: true },
     profile: {
       displayName: { type: String, default: "" },
+      profilePictureBase64: { type: String, default: "" },
       employeeCode: { type: String, default: "" },
       firstName: { type: String, default: "" },
       lastName: { type: String, default: "" },
@@ -63,9 +64,16 @@ const deviceSchema = new Schema(
 const faceTemplateSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
-    embeddingVector: [{ type: Number, required: true }],
-    version: { type: Number, default: 1 },
+    /** Encrypted embeddings per pose (AES-GCM). front, left, right. */
+    embeddingFront: { type: String, default: null },
+    embeddingLeft: { type: String, default: null },
+    embeddingRight: { type: String, default: null },
+    /** Model version for embedding compatibility. */
+    modelVersion: { type: Number, default: 1 },
     status: { type: String, default: "active" },
+    /** @deprecated legacy single embedding - migrate to embeddingFront/Left/Right */
+    embeddingVector: [{ type: Number }],
+    version: { type: Number, default: 1 },
   },
   { timestamps: true },
 );
@@ -111,6 +119,16 @@ const auditLogSchema = new Schema(
   { timestamps: true },
 );
 
+const awayAlertSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    employeeEmail: { type: String, required: true },
+    awayAt: { type: Date, required: true, default: () => new Date() },
+    minutesAway: { type: Number, required: true, default: 15 },
+  },
+  { timestamps: true },
+);
+
 const companyStructureSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -140,3 +158,5 @@ export const WorkSession =
 export const AuditLog = mongoose.models.AuditLog || mongoose.model("AuditLog", auditLogSchema);
 export const CompanyStructure =
   mongoose.models.CompanyStructure || mongoose.model("CompanyStructure", companyStructureSchema);
+export const AwayAlert =
+  mongoose.models.AwayAlert || mongoose.model("AwayAlert", awayAlertSchema);

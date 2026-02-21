@@ -1,3 +1,4 @@
+import "dart:convert";
 import "package:flutter/material.dart";
 import "screens/admin_screen.dart";
 import "screens/admin_attendance_screen.dart";
@@ -5,6 +6,7 @@ import "screens/admin_reports_screen.dart";
 import "screens/company_structure_screen.dart";
 import "screens/documents_screen.dart";
 import "screens/employees_screen.dart";
+import "screens/face_verification_login_screen.dart";
 import "screens/home_screen.dart";
 import "screens/insights_attendance_screen.dart";
 import "screens/job_details_setup_screen.dart";
@@ -24,6 +26,7 @@ import "services/api_client.dart";
 import "widgets/modern_sidebar.dart";
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const WorkforceApp());
 }
 
@@ -53,19 +56,26 @@ class _AppRootState extends State<AppRoot> {
   final _api = ApiClient(baseUrl: const String.fromEnvironment("API_BASE_URL", defaultValue: "http://localhost:3000/api"));
 
   bool _loggedIn = false;
+  bool _needsFaceVerification = false;
+  bool _faceEnrollMode = false;
   bool _isAdmin = false;
   bool _loading = false;
   String _error = "";
   String _currentUserName = "User";
+  String _profilePictureBase64 = "";
   String _selectedMenuItem = "admin_dashboard";
   Set<String> _expandedGroups = {"admin"};
   int _totalSeconds = 0;
   List<dynamic> _sessions = [];
+  List<dynamic> _hoursByDay = [];
   List<dynamic> _roles = [];
   List<dynamic> _events = [];
   List<dynamic> _users = [];
   List<dynamic> _companyStructures = [];
+  List<dynamic> _awayAlerts = [];
   Map<String, dynamic> _dashboardMetrics = {};
+  Map<String, dynamic>? _selectedEmployee;
+  Map<String, dynamic> _selectedEmployeeAttendance = {};
 
   Future<void> _login() async {
     setState(() {
@@ -77,12 +87,16 @@ class _AppRootState extends State<AppRoot> {
       final roleList = ((login["user"]?["roles"] ?? []) as List<dynamic>).map((e) => e.toString()).toList();
       final email = (login["user"]?["email"] ?? _emailController.text.trim()).toString();
       final localPart = email.contains("@") ? email.split("@").first : email;
-      _loggedIn = true;
+      _needsFaceVerification = true;
       _isAdmin = roleList.contains("admin");
       _currentUserName = localPart.isEmpty ? "User" : "${localPart[0].toUpperCase()}${localPart.substring(1)}";
       _selectedMenuItem = _isAdmin ? "admin_dashboard" : "employees_attendance";
       _expandedGroups = _isAdmin ? {"admin"} : {"employees"};
-      await _refresh();
+      try {
+        _faceEnrollMode = !(await _api.hasFaceTemplate());
+      } catch (_) {
+        _faceEnrollMode = false;
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -92,33 +106,87 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
+  Future<void> _verifyFaceForLogin(List<double> embedding) async {
+    await _api.verifyFaceForLogin(embedding);
+  }
+
+  Future<void> _enrollMyFace(List<double> embedding, String pose, {String? profileImageBase64}) async {
+    await _api.enrollMyFace(embedding, pose, profileImageBase64: profileImageBase64);
+  }
+
+  void _onFaceVerified() {
+    setState(() {
+      _loggedIn = true;
+      _needsFaceVerification = false;
+    });
+    _refresh();
+  }
+
+  void _onFaceVerificationFailed() {
+    setState(() => _needsFaceVerification = true);
+  }
+
+  Future<void> _onEmployeeSelected(Map<String, dynamic> user) async {
+    setState(() {
+      _selectedEmployee = user;
+      _selectedEmployeeAttendance = {};
+    });
+    try {
+      final att = await _api.fetchUserAttendance(user["_id"].toString(), days: 30);
+      if (mounted && _selectedEmployee?["_id"] == user["_id"]) {
+        setState(() => _selectedEmployeeAttendance = att);
+      }
+    } catch (_) {
+      if (mounted && _selectedEmployee?["_id"] == user["_id"]) {
+        setState(() => _selectedEmployeeAttendance = {"sessions": [], "hoursByDay": []});
+      }
+    }
+  }
+
+  Future<void> _backToLogin() async {
+    await _api.clearTokens();
+    setState(() {
+      _needsFaceVerification = false;
+    });
+  }
+
   Future<void> _refresh() async {
     setState(() => _loading = true);
     try {
       final futures = await Future.wait([
         _api.fetchToday(),
         _api.fetchSummary(),
+        _api.fetchMyHoursByDay(days: 30),
+        _api.fetchCurrentUser(),
         if (_isAdmin) _api.fetchRoles() else Future.value(<dynamic>[]),
         if (_isAdmin) _api.fetchAttendanceEvents() else Future.value(<dynamic>[]),
         if (_isAdmin) _api.fetchUsers() else Future.value(<dynamic>[]),
         if (_isAdmin) _api.fetchCompanyStructures() else Future.value(<dynamic>[]),
+        if (_isAdmin) _api.fetchAwayAlerts() else Future.value(<dynamic>[]),
         if (_isAdmin) _api.fetchDashboardMetrics() else Future.value(<String, dynamic>{}),
       ]);
       final today = futures[0] as Map<String, dynamic>;
       final sessions = futures[1] as List<dynamic>;
-      final roles = futures[2] as List<dynamic>;
-      final events = futures[3] as List<dynamic>;
-      final users = futures[4] as List<dynamic>;
-      final companyStructures = futures[5] as List<dynamic>;
-      final dashboardMetrics = futures[6] as Map<String, dynamic>;
+      final hoursByDay = futures[2] as List<dynamic>;
+      final currentUser = futures[3] as Map<String, dynamic>;
+      final roles = futures[4] as List<dynamic>;
+      final events = futures[5] as List<dynamic>;
+      final users = futures[6] as List<dynamic>;
+      final companyStructures = futures[7] as List<dynamic>;
+      final awayAlerts = futures[8] as List<dynamic>;
+      final dashboardMetrics = futures[9] as Map<String, dynamic>;
       if (mounted) {
         setState(() {
           _totalSeconds = (today["totalSeconds"] ?? 0) as int;
           _sessions = sessions;
+          _hoursByDay = hoursByDay;
+          final profile = currentUser["profile"] as Map<String, dynamic>?;
+          _profilePictureBase64 = profile?["profilePictureBase64"]?.toString() ?? "";
           _roles = roles;
           _events = events;
           _users = users;
           _companyStructures = companyStructures;
+          _awayAlerts = awayAlerts;
           _dashboardMetrics = dashboardMetrics;
         });
       }
@@ -247,6 +315,10 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
+  Future<void> _reportAwayAlert() async {
+    await _api.reportAwayAlert();
+  }
+
   Future<void> _clockOut(String imageBase64) async {
     setState(() => _loading = true);
     try {
@@ -290,16 +362,25 @@ class _AppRootState extends State<AppRoot> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _loggedIn
-          ? _buildDesktopShell()
-          : LoginScreen(
-              onLogin: _login,
-              emailController: _emailController,
-              passwordController: _passwordController,
-              errorText: _error,
-              loading: _loading,
-            ),
+    if (_loggedIn) {
+      return _buildDesktopShell();
+    }
+    if (_needsFaceVerification) {
+      return FaceVerificationLoginScreen(
+        onVerify: _verifyFaceForLogin,
+        onEnroll: _enrollMyFace,
+        onVerified: _onFaceVerified,
+        onVerificationFailed: _onFaceVerificationFailed,
+        onBackToLogin: () { _backToLogin(); },
+        isEnrollMode: _faceEnrollMode,
+      );
+    }
+    return LoginScreen(
+      onLogin: _login,
+      emailController: _emailController,
+      passwordController: _passwordController,
+      errorText: _error,
+      loading: _loading,
     );
   }
 
@@ -395,10 +476,12 @@ class _AppRootState extends State<AppRoot> {
             ),
           ];
 
-    return Row(
-      children: [
-        ModernSidebar(
+    return Scaffold(
+      body: Row(
+        children: [
+          ModernSidebar(
           userName: _currentUserName,
+          profilePictureBase64: _profilePictureBase64,
           selectedItemKey: _selectedMenuItem,
           groups: groups,
           expandedGroups: _expandedGroups,
@@ -421,7 +504,8 @@ class _AppRootState extends State<AppRoot> {
             ],
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -462,10 +546,15 @@ class _AppRootState extends State<AppRoot> {
           CircleAvatar(
             radius: 14,
             backgroundColor: const Color(0xFFE0ECFF),
-            child: Text(
-              _currentUserName.isNotEmpty ? _currentUserName.substring(0, 1).toUpperCase() : "U",
-              style: const TextStyle(color: Color(0xFF1D4ED8), fontWeight: FontWeight.w700),
-            ),
+            backgroundImage: _profilePictureBase64.isNotEmpty
+                ? MemoryImage(base64Decode(_profilePictureBase64))
+                : null,
+            child: _profilePictureBase64.isEmpty
+                ? Text(
+                    _currentUserName.isNotEmpty ? _currentUserName.substring(0, 1).toUpperCase() : "U",
+                    style: const TextStyle(color: Color(0xFF1D4ED8), fontWeight: FontWeight.w700),
+                  )
+                : null,
           ),
           const SizedBox(width: 6),
           PopupMenuButton<String>(
@@ -478,13 +567,20 @@ class _AppRootState extends State<AppRoot> {
               PopupMenuItem<String>(value: "logout", child: Text("Logout")),
             ],
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Column(
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_currentUserName, style: const TextStyle(color: Color(0xFF111827), fontWeight: FontWeight.w600)),
-                    Text(_isAdmin ? "Admin" : "Employee", style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12)),
+                    Text(
+                      _currentUserName,
+                      style: const TextStyle(color: Color(0xFF111827), fontWeight: FontWeight.w600, fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    Text(_isAdmin ? "Admin" : "Employee", style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
                   ],
                 ),
                 const SizedBox(width: 2),
@@ -500,7 +596,13 @@ class _AppRootState extends State<AppRoot> {
   Widget _buildAuthenticatedContent() {
     switch (_selectedMenuItem) {
       case "admin_dashboard":
-        return ModernDashboardScreen(metrics: _dashboardMetrics);
+        return ModernDashboardScreen(
+          metrics: _dashboardMetrics,
+          events: _events,
+          awayAlerts: _awayAlerts,
+          hoursByDay: _hoursByDay,
+          onRefresh: _refresh,
+        );
       case "admin_company_structure":
         return CompanyStructureScreen(
           rows: _companyStructures,
@@ -520,15 +622,20 @@ class _AppRootState extends State<AppRoot> {
       case "employees_list":
         return EmployeesScreen(
           users: _users,
+          selectedUser: _selectedEmployee,
+          selectedUserAttendance: _selectedEmployeeAttendance,
+          isAdmin: _isAdmin,
           onRefresh: _refresh,
           onCreateUser: _createUser,
           onUpdateUser: _updateUser,
+          onUserSelected: _onEmployeeSelected,
         );
       case "system_settings":
         return AdminScreen(
           loading: _loading,
           roles: _roles,
           events: _events,
+          awayAlerts: _awayAlerts,
           onRefresh: _refresh,
           onCreateRole: _createRole,
           onCreateUser: _createUser,
@@ -549,10 +656,12 @@ class _AppRootState extends State<AppRoot> {
         return HomeScreen(
           totalSeconds: _totalSeconds,
           events: _sessions,
+          hoursByDay: _hoursByDay,
           loading: _loading,
           onRefresh: _refresh,
           onClockIn: _clockIn,
           onClockOut: _clockOut,
+          onReportAway: _reportAwayAlert,
         );
       case "insights_attendance":
         return const InsightsAttendanceScreen();

@@ -15,6 +15,10 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   roleIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Role" }],
   isActive: { type: Boolean, default: true },
+  profile: {
+    displayName: { type: String, default: "" },
+    employeeCode: { type: String, default: "" },
+  },
 });
 
 const Role = mongoose.models.Role || mongoose.model("Role", roleSchema);
@@ -48,19 +52,45 @@ async function main() {
     });
   }
 
-  const email = "admin@euroasianngroup.com";
-  const existing = await User.findOne({ email });
+  const adminEmail = "admin@euroasianngroup.com";
+  let existing = await User.findOne({ email: adminEmail });
   if (!existing) {
     const passwordHash = await argon2.hash("Admin123!");
     await User.create({
-      email,
+      email: adminEmail,
       passwordHash,
       roleIds: [adminRole._id],
       isActive: true,
+      profile: { displayName: "Admin", employeeCode: "ADMIN001" },
     });
     console.log("Admin seeded.");
   } else {
     console.log("Admin already exists.");
+  }
+
+  let employeeRole = await Role.findOne({ name: "employee" });
+  if (!employeeRole) {
+    employeeRole = await Role.create({
+      name: "employee",
+      description: "Regular employee",
+      permissions: ["attendance:read", "dashboard:read"],
+    });
+  }
+
+  const employeeEmail = "lalithyachavala@euroasianngroup.com";
+  existing = await User.findOne({ email: employeeEmail });
+  if (!existing) {
+    const passwordHash = await argon2.hash("lalithya");
+    await User.create({
+      email: employeeEmail,
+      passwordHash,
+      roleIds: [employeeRole._id],
+      isActive: true,
+      profile: { displayName: "Lalithya Chavala", employeeCode: "EMP001" },
+    });
+    console.log("Employee seeded.");
+  } else {
+    console.log("Employee already exists.");
   }
 
   await mongoose.disconnect();
