@@ -1,3 +1,4 @@
+import "dart:convert";
 import "package:flutter/material.dart";
 
 class ModernNavItem {
@@ -30,6 +31,7 @@ class ModernSidebar extends StatelessWidget {
   const ModernSidebar({
     super.key,
     required this.userName,
+    this.profilePictureBase64 = "",
     required this.selectedItemKey,
     required this.groups,
     required this.expandedGroups,
@@ -38,6 +40,7 @@ class ModernSidebar extends StatelessWidget {
   });
 
   final String userName;
+  final String profilePictureBase64;
   final String selectedItemKey;
   final List<ModernNavGroup> groups;
   final Set<String> expandedGroups;
@@ -69,10 +72,15 @@ class ModernSidebar extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 16,
-                  backgroundColor: Color(0xFFE5E7EB),
-                  child: Icon(Icons.person, size: 17, color: Colors.black54),
+                  backgroundColor: const Color(0xFFE5E7EB),
+                  backgroundImage: profilePictureBase64.isNotEmpty
+                      ? MemoryImage(base64Decode(profilePictureBase64))
+                      : null,
+                  child: profilePictureBase64.isEmpty
+                      ? const Icon(Icons.person, size: 17, color: Colors.black54)
+                      : null,
                 ),
                 const SizedBox(width: 8),
                 Column(

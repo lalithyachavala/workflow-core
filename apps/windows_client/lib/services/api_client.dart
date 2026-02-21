@@ -26,6 +26,34 @@ class ApiClient {
     return json;
   }
 
+  Future<bool> hasFaceTemplate() async {
+    final json = await _authedGet("/auth/face-status");
+    return (json["hasTemplate"] ?? false) as bool;
+  }
+
+  Future<void> verifyFaceForLogin(String imageBase64) async {
+    final json = await _authedPost("/auth/verify-face", {"imageBase64": imageBase64});
+    if (json["ok"] != true) {
+      throw Exception(json["message"] ?? "Face verification failed.");
+    }
+  }
+
+  Future<void> enrollMyFace(String imageBase64) async {
+    final json = await _authedPost("/auth/enroll-face", {"imageBase64": imageBase64});
+    if (json["ok"] != true) {
+      throw Exception(json["message"] ?? "Face enrollment failed.");
+    }
+  }
+
+  Future<void> clearTokens() async {
+    await _tokenStore.clear();
+  }
+
+  Future<Map<String, dynamic>> fetchCurrentUser() async {
+    final json = await _authedGet("/auth/me");
+    return (json["user"] ?? {}) as Map<String, dynamic>;
+  }
+
   Future<void> clockIn(String imageBase64) async {
     await _clock("/attendance/clock-in", imageBase64);
   }
@@ -41,6 +69,16 @@ class ApiClient {
   Future<List<dynamic>> fetchSummary() async {
     final json = await _authedGet("/attendance/my/summary");
     return (json["sessions"] ?? []) as List<dynamic>;
+  }
+
+  Future<List<dynamic>> fetchMyHoursByDay({int days = 30}) async {
+    final json = await _authedGet("/attendance/my/hours-by-day?days=$days");
+    return (json["hoursByDay"] ?? []) as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> fetchUserAttendance(String userId, {int days = 30}) async {
+    final json = await _authedGet("/admin/users/$userId/attendance?days=$days");
+    return json as Map<String, dynamic>;
   }
 
   Future<List<dynamic>> fetchRoles() async {
@@ -75,6 +113,15 @@ class ApiClient {
   Future<List<dynamic>> fetchAttendanceEvents() async {
     final json = await _authedGet("/admin/attendance");
     return (json["events"] ?? []) as List<dynamic>;
+  }
+
+  Future<void> reportAwayAlert() async {
+    await _authedPost("/attendance/away-alert", {});
+  }
+
+  Future<List<dynamic>> fetchAwayAlerts() async {
+    final json = await _authedGet("/admin/away-alerts");
+    return (json["alerts"] ?? []) as List<dynamic>;
   }
 
   Future<void> enrollFace(String userId, String imageBase64) async {

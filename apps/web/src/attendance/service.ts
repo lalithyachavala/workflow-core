@@ -119,3 +119,48 @@ export async function getTodaySummary(userId: string) {
   const totalSeconds = sessions.reduce((acc, s) => acc + (s.totalSeconds || 0), 0);
   return { totalSeconds, sessions };
 }
+
+export async function getHoursByDay(userId: string, days = 30) {
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setUTCHours(23, 59, 59, 999);
+
+  const sessions = await WorkSession.find({
+    userId,
+    clockInAt: { $gte: start, $lte: end },
+    clockOutAt: { $ne: null },
+  }).lean();
+
+  const byDate = new Map<string, number>();
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    byDate.set(d.toISOString().slice(0, 10), 0);
+  }
+
+  for (const s of sessions) {
+    const dateStr = new Date(s.clockInAt).toISOString().slice(0, 10);
+    byDate.set(dateStr, (byDate.get(dateStr) ?? 0) + (s.totalSeconds ?? 0));
+  }
+
+  return Array.from(byDate.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, totalSeconds]) => ({ date, totalSeconds }));
+}
+
+export async function getUserAttendance(userId: string, days = 30) {
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  const sessions = await WorkSession.find({
+    userId,
+    clockInAt: { $gte: start },
+  })
+    .sort({ clockInAt: -1 })
+    .limit(100)
+    .lean();
+
+  const hoursByDay = await getHoursByDay(userId, days);
+  return { sessions, hoursByDay };
+}

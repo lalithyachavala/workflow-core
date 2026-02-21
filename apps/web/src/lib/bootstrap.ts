@@ -41,15 +41,36 @@ export async function ensureBootstrap() {
     }
   }
 
-  const email = "admin@euroasianngroup.com";
-  const adminExists = await User.findOne({ email });
+  const adminEmail = "admin@euroasianngroup.com";
+  const adminExists = await User.findOne({ email: adminEmail });
   if (!adminExists) {
     await User.create({
-      email,
+      email: adminEmail,
       passwordHash: await hashPassword("Admin123!"),
       roleIds: [adminRole._id],
       isActive: true,
       profile: { displayName: "Admin", employeeCode: "ADMIN001" },
+    });
+  }
+
+  let employeeRole = await Role.findOne({ name: "employee" });
+  if (!employeeRole) {
+    employeeRole = await Role.create({
+      name: "employee",
+      description: "Regular employee",
+      permissions: ["attendance:read", "dashboard:read"],
+    });
+  }
+
+  const employeeEmail = "lalithyachavala@euroasianngroup.com";
+  const employeeExists = await User.findOne({ email: employeeEmail });
+  if (!employeeExists) {
+    await User.create({
+      email: employeeEmail,
+      passwordHash: await hashPassword("lalithya"),
+      roleIds: [employeeRole._id],
+      isActive: true,
+      profile: { displayName: "Lalithya Chavala", employeeCode: "EMP001" },
     });
   }
 

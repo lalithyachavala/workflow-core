@@ -1,5 +1,11 @@
 import crypto from "crypto";
-import { FaceTemplate } from "@/src/db/models";
+import { FaceTemplate, User } from "@/src/db/models";
+
+export async function updateProfilePicture(userId: string, imageBase64: string) {
+  await User.findByIdAndUpdate(userId, {
+    "profile.profilePictureBase64": imageBase64,
+  });
+}
 
 function imageToEmbedding(imageBase64: string) {
   const digest = crypto.createHash("sha256").update(imageBase64).digest();
@@ -31,6 +37,7 @@ export async function enrollFace(userId: string, imageBase64: string) {
     { embeddingVector: embedding, status: "active" },
     { upsert: true, new: true },
   );
+  await updateProfilePicture(userId, imageBase64);
 }
 
 export async function verifyFace(userId: string, imageBase64: string) {
