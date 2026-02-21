@@ -1,10 +1,25 @@
 import "package:flutter/material.dart";
 import "screens/admin_screen.dart";
+import "screens/admin_attendance_screen.dart";
+import "screens/admin_reports_screen.dart";
 import "screens/company_structure_screen.dart";
+import "screens/documents_screen.dart";
 import "screens/employees_screen.dart";
 import "screens/home_screen.dart";
+import "screens/insights_attendance_screen.dart";
+import "screens/job_details_setup_screen.dart";
 import "screens/login_screen.dart";
 import "screens/modern_dashboard_screen.dart";
+import "screens/overtime_screen.dart";
+import "screens/payroll_salary_screen.dart";
+import "screens/payroll_reports_screen.dart";
+import "screens/projects_setup_screen.dart";
+import "screens/qualifications_setup_screen.dart";
+import "screens/system_field_names_screen.dart";
+import "screens/system_modules_screen.dart";
+import "screens/system_permissions_screen.dart";
+import "screens/system_users_screen.dart";
+import "screens/travel_requests_screen.dart";
 import "services/api_client.dart";
 import "widgets/modern_sidebar.dart";
 
@@ -33,8 +48,8 @@ class AppRoot extends StatefulWidget {
 }
 
 class _AppRootState extends State<AppRoot> {
-  final _emailController = TextEditingController(text: "employee@example.com");
-  final _passwordController = TextEditingController(text: "Employee123!");
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _api = ApiClient(baseUrl: const String.fromEnvironment("API_BASE_URL", defaultValue: "http://localhost:3000/api"));
 
   bool _loggedIn = false;
@@ -248,6 +263,31 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
+  Future<void> _logout() async {
+    setState(() => _loading = true);
+    try {
+      await _api.logout();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loggedIn = false;
+          _isAdmin = false;
+          _error = "";
+          _selectedMenuItem = "admin_dashboard";
+          _expandedGroups = {"admin"};
+          _sessions = [];
+          _roles = [];
+          _events = [];
+          _users = [];
+          _companyStructures = [];
+          _dashboardMetrics = {};
+          _totalSeconds = 0;
+          _loading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -428,16 +468,30 @@ class _AppRootState extends State<AppRoot> {
             ),
           ),
           const SizedBox(width: 6),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_currentUserName, style: const TextStyle(color: Color(0xFF111827), fontWeight: FontWeight.w600)),
-              Text(_isAdmin ? "Admin" : "Employee", style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12)),
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              if (v == "logout") {
+                _logout();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem<String>(value: "logout", child: Text("Logout")),
             ],
+            child: Row(
+              children: [
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_currentUserName, style: const TextStyle(color: Color(0xFF111827), fontWeight: FontWeight.w600)),
+                    Text(_isAdmin ? "Admin" : "Employee", style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(width: 2),
+                const Icon(Icons.arrow_drop_down, color: Color(0xFF6B7280)),
+              ],
+            ),
           ),
-          const SizedBox(width: 2),
-          const Icon(Icons.arrow_drop_down, color: Color(0xFF6B7280)),
         ],
       ),
     );
@@ -455,6 +509,14 @@ class _AppRootState extends State<AppRoot> {
           onUpdate: _updateCompanyStructure,
           onDelete: _deleteCompanyStructure,
         );
+      case "admin_job_setup":
+        return const JobDetailsSetupScreen();
+      case "admin_qualification_setup":
+        return const QualificationsSetupScreen();
+      case "admin_projects":
+        return const ProjectsSetupScreen();
+      case "reports":
+        return const AdminReportsScreen();
       case "employees_list":
         return EmployeesScreen(
           users: _users,
@@ -463,8 +525,6 @@ class _AppRootState extends State<AppRoot> {
           onUpdateUser: _updateUser,
         );
       case "system_settings":
-      case "system_users":
-      case "system_permissions":
         return AdminScreen(
           loading: _loading,
           roles: _roles,
@@ -474,8 +534,18 @@ class _AppRootState extends State<AppRoot> {
           onCreateUser: _createUser,
           onEnrollFace: _enrollFace,
         );
+      case "system_users":
+        return const SystemUsersScreen();
+      case "system_modules":
+        return const SystemModulesScreen();
+      case "system_permissions":
+        return const SystemPermissionsScreen();
+      case "system_fields":
+        return const SystemFieldNamesScreen();
       case "employees_attendance":
-      case "manage_overtime":
+        if (_isAdmin) {
+          return const AdminAttendanceScreen();
+        }
         return HomeScreen(
           totalSeconds: _totalSeconds,
           events: _sessions,
@@ -484,6 +554,18 @@ class _AppRootState extends State<AppRoot> {
           onClockIn: _clockIn,
           onClockOut: _clockOut,
         );
+      case "insights_attendance":
+        return const InsightsAttendanceScreen();
+      case "payroll_salary":
+        return const PayrollSalaryScreen();
+      case "payroll_reports":
+        return const PayrollReportsScreen();
+      case "manage_overtime":
+        return const OvertimeScreen();
+      case "manage_documents":
+        return const DocumentsScreen();
+      case "manage_travel":
+        return const TravelRequestsScreen();
       default:
         return _placeholderPanel(
           _selectedMenuItem.replaceAll("_", " "),
