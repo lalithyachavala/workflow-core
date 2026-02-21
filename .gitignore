@@ -6,6 +6,7 @@ apps/web/.next/
 apps/web/out/
 
 # Flutter
+apps/windows_client/assets/arcfaceresnet100-8.onnx
 apps/windows_client/.dart_tool/
 apps/windows_client/build/
 apps/windows_client/.flutter-plugins
