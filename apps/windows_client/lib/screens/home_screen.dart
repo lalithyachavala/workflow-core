@@ -1,10 +1,10 @@
 import "dart:async";
-import "dart:convert";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_inactive_timer/flutter_inactive_timer.dart";
 import "../widgets/attendance_bar_chart.dart";
 import "face_detection_screen.dart";
+import "face_capture_for_clock_screen.dart";
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -24,8 +24,8 @@ class HomeScreen extends StatefulWidget {
   final List<dynamic> hoursByDay;
   final bool loading;
   final Future<void> Function() onRefresh;
-  final Future<void> Function(String imageBase64) onClockIn;
-  final Future<void> Function(String imageBase64) onClockOut;
+  final Future<void> Function(List<double> embedding) onClockIn;
+  final Future<void> Function(List<double> embedding) onClockOut;
   final Future<void> Function() onReportAway;
 
   @override
@@ -34,30 +34,29 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   FlutterInactiveTimer? _inactiveTimer;
-  Timer? _alarmTimer;
   Timer? _adminNotifyTimer;
   bool _awayDialogShown = false;
 
   bool get _hasOpenSession =>
       widget.events.any((s) => s["clockOutAt"] == null || s["clockOutAt"] == "");
 
-  void _stopAlarm() {
-    _alarmTimer?.cancel();
-    _alarmTimer = null;
-  }
-
-  void _startAlarm() {
-    _stopAlarm();
-    _alarmTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      SystemSound.play(SystemSoundType.alert);
-    });
+  /// Plays a clear buzzer burst (4 times) exactly at the 10 min mark only.
+  void _playBuzzerBurst() {
+    Future<void> play() async {
+      for (var i = 0; i < 4; i++) {
+        SystemSound.play(SystemSoundType.alert);
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+      }
+    }
+    play();
   }
 
   void _on10MinAway() {
     if (_awayDialogShown || !mounted) return;
     _awayDialogShown = true;
-    _startAlarm();
+    _playBuzzerBurst(); // Buzzer: 3-4 short beeps at 10 min mark only
 
+    // At 15 min (5 min after 10-min warning), report to admin and notify employee
     _adminNotifyTimer = Timer(const Duration(minutes: 5), () async {
       _adminNotifyTimer?.cancel();
       _adminNotifyTimer = null;
@@ -65,12 +64,28 @@ class _HomeScreenState extends State<HomeScreen> {
         await widget.onReportAway();
       } catch (_) {}
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Admin has been notified that you have been away for 15+ minutes."),
-            backgroundColor: Colors.orange,
+        Navigator.of(context).pop(); // Close the 10-min dialog if still open
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Text("Inactivity Recorded"),
+            content: const Text(
+              "Your inactivity has been recorded and sent to admin.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  _awayDialogShown = false;
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text("OK"),
+              ),
+            ],
           ),
-        );
+        ).then((_) {
+          _awayDialogShown = false;
+        });
       }
     });
 
@@ -85,7 +100,6 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              _stopAlarm();
               _adminNotifyTimer?.cancel();
               _adminNotifyTimer = null;
               _awayDialogShown = false;
@@ -97,7 +111,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ).then((_) {
       _awayDialogShown = false;
-      _stopAlarm();
       _adminNotifyTimer?.cancel();
       _adminNotifyTimer = null;
     });
@@ -117,7 +130,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _stopIdleMonitoring() {
     _inactiveTimer?.stopMonitoring();
     _inactiveTimer = null;
-    _stopAlarm();
     _adminNotifyTimer?.cancel();
     _adminNotifyTimer = null;
     _awayDialogShown = false;
@@ -154,7 +166,6 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
 
-    final fakeImageBase64 = base64Encode(utf8.encode("face-capture-placeholder"));
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -165,24 +176,36 @@ class _HomeScreenState extends State<HomeScreen> {
             "Today's Total Working Time: ${_formatDuration(widget.totalSeconds)}",
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          if (_hasOpenSession)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                "Away detection active (alarm at 10 min, admin notified at 15 min)",
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-            ),
           const SizedBox(height: 16),
           Row(
             children: [
               ElevatedButton(
-                onPressed: widget.loading ? null : () => widget.onClockIn(fakeImageBase64),
+                onPressed: widget.loading
+                    ? null
+                    : () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => FaceCaptureForClockScreen(
+                              title: "Clock In (Face Verify)",
+                              onCaptured: (embedding) => widget.onClockIn(embedding),
+                            ),
+                          ),
+                        ),
                 child: const Text("Clock In (Face Verify)"),
               ),
               const SizedBox(width: 12),
               ElevatedButton(
-                onPressed: widget.loading ? null : () => widget.onClockOut(fakeImageBase64),
+                onPressed: widget.loading
+                    ? null
+                    : () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => FaceCaptureForClockScreen(
+                              title: "Clock Out (Face Verify)",
+                              onCaptured: (embedding) => widget.onClockOut(embedding),
+                            ),
+                          ),
+                        ),
                 child: const Text("Clock Out (Face Verify)"),
               ),
               const SizedBox(width: 12),

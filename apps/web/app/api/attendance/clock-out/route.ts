@@ -7,7 +7,7 @@ import { clockOut, registerDevice } from "@/src/attendance/service";
 import { verifyFace } from "@/src/biometric/face";
 
 const bodySchema = z.object({
-  imageBase64: z.string().min(20),
+  embedding: z.array(z.number()).length(512),
   deviceFingerprint: z.string().min(3),
   hostname: z.string().min(1),
   osVersion: z.string().min(1),
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Invalid payload." }, { status: 400 });
   }
 
-  const faceResult = await verifyFace(user.sub, parsed.data.imageBase64);
+  const faceResult = await verifyFace(user.sub, parsed.data.embedding);
   if (!faceResult.accepted) {
     return NextResponse.json({ message: "Face verification failed.", faceResult }, { status: 403 });
   }
