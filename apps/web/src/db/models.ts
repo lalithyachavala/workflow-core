@@ -141,6 +141,18 @@ const companyStructureSchema = new Schema(
   { timestamps: true },
 );
 
+const loginHistorySchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    loginTime: { type: Date, required: true },
+    loginTimeFormatted: { type: String, required: true },
+    ipAddress: { type: String, default: "" },
+    systemName: { type: String, default: "" },
+    location: { type: String, default: "" },
+  },
+  { timestamps: true },
+);
+
 export type UserDoc = InferSchemaType<typeof userSchema>;
 export type RoleDoc = InferSchemaType<typeof roleSchema>;
 
@@ -160,3 +172,5 @@ export const CompanyStructure =
   mongoose.models.CompanyStructure || mongoose.model("CompanyStructure", companyStructureSchema);
 export const AwayAlert =
   mongoose.models.AwayAlert || mongoose.model("AwayAlert", awayAlertSchema);
+export const LoginHistory =
+  mongoose.models.LoginHistory || mongoose.model("LoginHistory", loginHistorySchema);
