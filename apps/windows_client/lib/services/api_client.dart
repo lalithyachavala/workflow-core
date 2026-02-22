@@ -12,9 +12,30 @@ class ApiClient {
   final TokenStore _tokenStore = TokenStore();
 
   Future<Map<String, dynamic>> login(String email, String password) async {
+    String systemName = "Windows Native Client";
+    String publicIp = "";
+
+    try {
+      final windows = await DeviceInfoPlugin().windowsInfo;
+      systemName =
+          "Windows ${windows.displayVersion} (${windows.computerName})";
+    } catch (_) {}
+
+    try {
+      final ipRes =
+          await http.get(Uri.parse("https://api.ipify.org?format=json"));
+      if (ipRes.statusCode == 200) {
+        publicIp = jsonDecode(ipRes.body)["ip"] as String;
+      }
+    } catch (_) {}
+
     final res = await http.post(
       Uri.parse("$baseUrl/auth/login"),
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "X-Device-System": systemName,
+        if (publicIp.isNotEmpty) "X-Public-Ip": publicIp,
+      },
       body: jsonEncode({"email": email, "password": password}),
     );
     if (res.statusCode >= 400) {
@@ -32,13 +53,15 @@ class ApiClient {
   }
 
   Future<void> verifyFaceForLogin(List<double> embedding) async {
-    final json = await _authedPost("/auth/verify-face", {"embedding": embedding});
+    final json =
+        await _authedPost("/auth/verify-face", {"embedding": embedding});
     if (json["ok"] != true) {
       throw Exception(json["message"] ?? "Face verification failed.");
     }
   }
 
-  Future<void> enrollMyFace(List<double> embedding, String pose, {String? profileImageBase64}) async {
+  Future<void> enrollMyFace(List<double> embedding, String pose,
+      {String? profileImageBase64}) async {
     final body = <String, dynamic>{"embedding": embedding, "pose": pose};
     if (profileImageBase64 != null && profileImageBase64.isNotEmpty) {
       body["profileImageBase64"] = profileImageBase64;
@@ -74,6 +97,18 @@ class ApiClient {
 
   Future<void> clockIn(List<double> embedding) async {
     await _clock("/attendance/clock-in", embedding);
+  Future<List<dynamic>> fetchLoginHistory({int days = 7}) async {
+    final json = await _authedGet("/auth/login-history?days=$days");
+    return (json["history"] ?? []) as List<dynamic>;
+  }
+
+  Future<List<dynamic>> fetchAdminLoginHistory({int days = 7}) async {
+    final json = await _authedGet("/admin/login-history?days=$days");
+    return (json["history"] ?? []) as List<dynamic>;
+  }
+
+  Future<void> clockIn(String imageBase64) async {
+    await _clock("/attendance/clock-in", imageBase64);
   }
 
   Future<void> clockOut(List<double> embedding) async {
@@ -94,7 +129,8 @@ class ApiClient {
     return (json["hoursByDay"] ?? []) as List<dynamic>;
   }
 
-  Future<Map<String, dynamic>> fetchUserAttendance(String userId, {int days = 30}) async {
+  Future<Map<String, dynamic>> fetchUserAttendance(String userId,
+      {int days = 30}) async {
     final json = await _authedGet("/admin/users/$userId/attendance?days=$days");
     return json as Map<String, dynamic>;
   }
@@ -104,7 +140,8 @@ class ApiClient {
     return (json["roles"] ?? []) as List<dynamic>;
   }
 
-  Future<void> createRole(String name, String description, List<String> permissions) async {
+  Future<void> createRole(
+      String name, String description, List<String> permissions) async {
     await _authedPost("/admin/roles", {
       "name": name,
       "description": description,
@@ -159,7 +196,8 @@ class ApiClient {
     return (json["users"] ?? []) as List<dynamic>;
   }
 
-  Future<Map<String, dynamic>> updateUser(String userId, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> updateUser(
+      String userId, Map<String, dynamic> payload) async {
     return _authedPatch("/admin/users/$userId", payload);
   }
 
@@ -172,7 +210,8 @@ class ApiClient {
     await _authedPost("/admin/company-structures", payload);
   }
 
-  Future<void> updateCompanyStructure(String id, Map<String, dynamic> payload) async {
+  Future<void> updateCompanyStructure(
+      String id, Map<String, dynamic> payload) async {
     await _authedPatch("/admin/company-structures/$id", payload);
   }
 
@@ -224,7 +263,8 @@ class ApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> _authedPost(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> _authedPost(
+      String path, Map<String, dynamic> body) async {
     var accessToken = await _tokenStore.getAccessToken();
     if (accessToken == null) {
       throw Exception("No access token.");
@@ -258,7 +298,8 @@ class ApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> _authedPatch(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> _authedPatch(
+      String path, Map<String, dynamic> body) async {
     var accessToken = await _tokenStore.getAccessToken();
     if (accessToken == null) {
       throw Exception("No access token.");

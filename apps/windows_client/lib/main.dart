@@ -1,8 +1,9 @@
 import "dart:convert";
 import "package:flutter/material.dart";
-import "screens/admin_screen.dart";
 import "screens/admin_attendance_screen.dart";
+import "screens/admin_login_activity_screen.dart";
 import "screens/admin_reports_screen.dart";
+import "screens/admin_screen.dart";
 import "screens/company_structure_screen.dart";
 import "screens/documents_screen.dart";
 import "screens/employees_screen.dart";
@@ -11,6 +12,7 @@ import "screens/home_screen.dart";
 import "screens/inactivities_screen.dart";
 import "screens/insights_attendance_screen.dart";
 import "screens/job_details_setup_screen.dart";
+import "screens/login_activity_screen.dart";
 import "screens/login_screen.dart";
 import "screens/modern_dashboard_screen.dart";
 import "screens/overtime_screen.dart";
@@ -54,7 +56,9 @@ class AppRoot extends StatefulWidget {
 class _AppRootState extends State<AppRoot> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _api = ApiClient(baseUrl: const String.fromEnvironment("API_BASE_URL", defaultValue: "http://localhost:3000/api"));
+  final _api = ApiClient(
+      baseUrl: const String.fromEnvironment("API_BASE_URL",
+          defaultValue: "http://localhost:3000/api"));
 
   bool _loggedIn = false;
   bool _needsFaceVerification = false;
@@ -84,13 +88,19 @@ class _AppRootState extends State<AppRoot> {
       _error = "";
     });
     try {
-      final login = await _api.login(_emailController.text.trim(), _passwordController.text);
-      final roleList = ((login["user"]?["roles"] ?? []) as List<dynamic>).map((e) => e.toString()).toList();
-      final email = (login["user"]?["email"] ?? _emailController.text.trim()).toString();
+      final login = await _api.login(
+          _emailController.text.trim(), _passwordController.text);
+      final roleList = ((login["user"]?["roles"] ?? []) as List<dynamic>)
+          .map((e) => e.toString())
+          .toList();
+      final email =
+          (login["user"]?["email"] ?? _emailController.text.trim()).toString();
       final localPart = email.contains("@") ? email.split("@").first : email;
       _needsFaceVerification = true;
       _isAdmin = roleList.contains("admin");
-      _currentUserName = localPart.isEmpty ? "User" : "${localPart[0].toUpperCase()}${localPart.substring(1)}";
+      _currentUserName = localPart.isEmpty
+          ? "User"
+          : "${localPart[0].toUpperCase()}${localPart.substring(1)}";
       _selectedMenuItem = _isAdmin ? "admin_dashboard" : "employees_attendance";
       _expandedGroups = _isAdmin ? {"admin"} : {"employees"};
       try {
@@ -111,8 +121,10 @@ class _AppRootState extends State<AppRoot> {
     await _api.verifyFaceForLogin(embedding);
   }
 
-  Future<void> _enrollMyFace(List<double> embedding, String pose, {String? profileImageBase64}) async {
-    await _api.enrollMyFace(embedding, pose, profileImageBase64: profileImageBase64);
+  Future<void> _enrollMyFace(List<double> embedding, String pose,
+      {String? profileImageBase64}) async {
+    await _api.enrollMyFace(embedding, pose,
+        profileImageBase64: profileImageBase64);
   }
 
   void _onFaceVerified() {
@@ -133,13 +145,15 @@ class _AppRootState extends State<AppRoot> {
       _selectedEmployeeAttendance = {};
     });
     try {
-      final att = await _api.fetchUserAttendance(user["_id"].toString(), days: 30);
+      final att =
+          await _api.fetchUserAttendance(user["_id"].toString(), days: 30);
       if (mounted && _selectedEmployee?["_id"] == user["_id"]) {
         setState(() => _selectedEmployeeAttendance = att);
       }
     } catch (_) {
       if (mounted && _selectedEmployee?["_id"] == user["_id"]) {
-        setState(() => _selectedEmployeeAttendance = {"sessions": [], "hoursByDay": []});
+        setState(() =>
+            _selectedEmployeeAttendance = {"sessions": [], "hoursByDay": []});
       }
     }
   }
@@ -160,11 +174,20 @@ class _AppRootState extends State<AppRoot> {
         _api.fetchMyHoursByDay(days: 30),
         _api.fetchCurrentUser(),
         if (_isAdmin) _api.fetchRoles() else Future.value(<dynamic>[]),
-        if (_isAdmin) _api.fetchAttendanceEvents() else Future.value(<dynamic>[]),
+        if (_isAdmin)
+          _api.fetchAttendanceEvents()
+        else
+          Future.value(<dynamic>[]),
         if (_isAdmin) _api.fetchUsers() else Future.value(<dynamic>[]),
-        if (_isAdmin) _api.fetchCompanyStructures() else Future.value(<dynamic>[]),
+        if (_isAdmin)
+          _api.fetchCompanyStructures()
+        else
+          Future.value(<dynamic>[]),
         if (_isAdmin) _api.fetchAwayAlerts() else Future.value(<dynamic>[]),
-        if (_isAdmin) _api.fetchDashboardMetrics() else Future.value(<String, dynamic>{}),
+        if (_isAdmin)
+          _api.fetchDashboardMetrics()
+        else
+          Future.value(<String, dynamic>{}),
       ]);
       final today = futures[0] as Map<String, dynamic>;
       final sessions = futures[1] as List<dynamic>;
@@ -182,7 +205,8 @@ class _AppRootState extends State<AppRoot> {
           _sessions = sessions;
           _hoursByDay = hoursByDay;
           final profile = currentUser["profile"] as Map<String, dynamic>?;
-          _profilePictureBase64 = profile?["profilePictureBase64"]?.toString() ?? "";
+          _profilePictureBase64 =
+              profile?["profilePictureBase64"]?.toString() ?? "";
           _roles = roles;
           _events = events;
           _users = users;
@@ -198,7 +222,8 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
-  Future<void> _createRole(String name, String description, List<String> permissions) async {
+  Future<void> _createRole(
+      String name, String description, List<String> permissions) async {
     setState(() => _loading = true);
     try {
       await _api.createRole(name, description, permissions);
@@ -220,16 +245,21 @@ class _AppRootState extends State<AppRoot> {
         password: payload["password"].toString(),
         displayName: payload["displayName"].toString(),
         employeeCode: payload["employeeCode"].toString(),
-        roleNames: (payload["roleNames"] as List<dynamic>).map((e) => e.toString()).toList(),
+        roleNames: (payload["roleNames"] as List<dynamic>)
+            .map((e) => e.toString())
+            .toList(),
       );
       if (payload["profile"] is Map<String, dynamic>) {
         final users = await _api.fetchUsers();
         final created = users.cast<Map<String, dynamic>>().firstWhere(
-              (u) => (u["email"]?.toString() ?? "").toLowerCase() == payload["email"].toString().toLowerCase(),
+              (u) =>
+                  (u["email"]?.toString() ?? "").toLowerCase() ==
+                  payload["email"].toString().toLowerCase(),
               orElse: () => <String, dynamic>{},
             );
         if (created["_id"] != null) {
-          await _api.updateUser(created["_id"].toString(), {"profile": payload["profile"]});
+          await _api.updateUser(
+              created["_id"].toString(), {"profile": payload["profile"]});
         }
       }
       await _refresh();
@@ -264,7 +294,8 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
-  Future<void> _updateCompanyStructure(String id, Map<String, dynamic> payload) async {
+  Future<void> _updateCompanyStructure(
+      String id, Map<String, dynamic> payload) async {
     setState(() => _loading = true);
     try {
       await _api.updateCompanyStructure(id, payload);
@@ -307,7 +338,8 @@ class _AppRootState extends State<AppRoot> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
       if (mounted) {
@@ -327,7 +359,8 @@ class _AppRootState extends State<AppRoot> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
       if (mounted) {
@@ -372,7 +405,9 @@ class _AppRootState extends State<AppRoot> {
         onEnroll: _enrollMyFace,
         onVerified: _onFaceVerified,
         onVerificationFailed: _onFaceVerificationFailed,
-        onBackToLogin: () { _backToLogin(); },
+        onBackToLogin: () {
+          _backToLogin();
+        },
         isEnrollMode: _faceEnrollMode,
       );
     }
@@ -393,11 +428,26 @@ class _AppRootState extends State<AppRoot> {
               label: "Admin",
               icon: Icons.token_outlined,
               items: [
-                ModernNavItem(keyName: "admin_dashboard", label: "Dashboard", icon: Icons.desktop_windows_outlined),
-                ModernNavItem(keyName: "admin_company_structure", label: "Company Structure", icon: Icons.apartment),
-                ModernNavItem(keyName: "admin_job_setup", label: "Job Details Setup", icon: Icons.view_week_outlined),
-                ModernNavItem(keyName: "admin_qualification_setup", label: "Qualifications Setup", icon: Icons.check_box_outlined),
-                ModernNavItem(keyName: "admin_projects", label: "Projects", icon: Icons.list_alt_outlined),
+                ModernNavItem(
+                    keyName: "admin_dashboard",
+                    label: "Dashboard",
+                    icon: Icons.desktop_windows_outlined),
+                ModernNavItem(
+                    keyName: "admin_company_structure",
+                    label: "Company Structure",
+                    icon: Icons.apartment),
+                ModernNavItem(
+                    keyName: "admin_job_setup",
+                    label: "Job Details Setup",
+                    icon: Icons.view_week_outlined),
+                ModernNavItem(
+                    keyName: "admin_qualification_setup",
+                    label: "Qualifications Setup",
+                    icon: Icons.check_box_outlined),
+                ModernNavItem(
+                    keyName: "admin_projects",
+                    label: "Projects",
+                    icon: Icons.list_alt_outlined),
               ],
             ),
             ModernNavGroup(
@@ -405,7 +455,14 @@ class _AppRootState extends State<AppRoot> {
               label: "Employees",
               icon: Icons.grid_view,
               items: [
-                ModernNavItem(keyName: "employees_list", label: "Employees", icon: Icons.groups),
+                ModernNavItem(
+                    keyName: "employees_list",
+                    label: "Employees",
+                    icon: Icons.groups),
+                ModernNavItem(
+                    keyName: "admin_login_activity",
+                    label: "Employee Login Activity",
+                    icon: Icons.history_outlined),
               ],
             ),
             ModernNavGroup(
@@ -418,6 +475,22 @@ class _AppRootState extends State<AppRoot> {
                 ModernNavItem(keyName: "admin_inactivities", label: "Inactivities", icon: Icons.timer_off_outlined),
                 ModernNavItem(keyName: "manage_travel", label: "Travel", icon: Icons.flight_outlined),
                 ModernNavItem(keyName: "manage_overtime", label: "Overtime", icon: Icons.more_time_outlined),
+                ModernNavItem(
+                    keyName: "manage_documents",
+                    label: "Documents",
+                    icon: Icons.description_outlined),
+                ModernNavItem(
+                    keyName: "employees_attendance",
+                    label: "Attendance",
+                    icon: Icons.schedule_outlined),
+                ModernNavItem(
+                    keyName: "manage_travel",
+                    label: "Travel",
+                    icon: Icons.flight_outlined),
+                ModernNavItem(
+                    keyName: "manage_overtime",
+                    label: "Overtime",
+                    icon: Icons.more_time_outlined),
               ],
             ),
             ModernNavGroup(
@@ -425,7 +498,10 @@ class _AppRootState extends State<AppRoot> {
               label: "Admin Reports",
               icon: Icons.auto_stories,
               items: [
-                ModernNavItem(keyName: "reports", label: "Reports", icon: Icons.folder_open_outlined),
+                ModernNavItem(
+                    keyName: "reports",
+                    label: "Reports",
+                    icon: Icons.folder_open_outlined),
               ],
             ),
             ModernNavGroup(
@@ -433,11 +509,26 @@ class _AppRootState extends State<AppRoot> {
               label: "System",
               icon: Icons.settings_suggest_outlined,
               items: [
-                ModernNavItem(keyName: "system_settings", label: "Settings", icon: Icons.settings_outlined),
-                ModernNavItem(keyName: "system_users", label: "Users", icon: Icons.person_outline),
-                ModernNavItem(keyName: "system_modules", label: "Manage Modules", icon: Icons.folder_outlined),
-                ModernNavItem(keyName: "system_permissions", label: "Manage Permissions", icon: Icons.lock_outline),
-                ModernNavItem(keyName: "system_fields", label: "Field Names", icon: Icons.straighten_outlined),
+                ModernNavItem(
+                    keyName: "system_settings",
+                    label: "Settings",
+                    icon: Icons.settings_outlined),
+                ModernNavItem(
+                    keyName: "system_users",
+                    label: "Users",
+                    icon: Icons.person_outline),
+                ModernNavItem(
+                    keyName: "system_modules",
+                    label: "Manage Modules",
+                    icon: Icons.folder_outlined),
+                ModernNavItem(
+                    keyName: "system_permissions",
+                    label: "Manage Permissions",
+                    icon: Icons.lock_outline),
+                ModernNavItem(
+                    keyName: "system_fields",
+                    label: "Field Names",
+                    icon: Icons.straighten_outlined),
               ],
             ),
             ModernNavGroup(
@@ -445,7 +536,10 @@ class _AppRootState extends State<AppRoot> {
               label: "Insights",
               icon: Icons.show_chart,
               items: [
-                ModernNavItem(keyName: "insights_attendance", label: "Time and Attendance", icon: Icons.person_search_outlined),
+                ModernNavItem(
+                    keyName: "insights_attendance",
+                    label: "Time and Attendance",
+                    icon: Icons.person_search_outlined),
               ],
             ),
             ModernNavGroup(
@@ -453,8 +547,14 @@ class _AppRootState extends State<AppRoot> {
               label: "Payroll",
               icon: Icons.receipt_long,
               items: [
-                ModernNavItem(keyName: "payroll_salary", label: "Salary", icon: Icons.payments_outlined),
-                ModernNavItem(keyName: "payroll_reports", label: "Payroll Reports", icon: Icons.analytics_outlined),
+                ModernNavItem(
+                    keyName: "payroll_salary",
+                    label: "Salary",
+                    icon: Icons.payments_outlined),
+                ModernNavItem(
+                    keyName: "payroll_reports",
+                    label: "Payroll Reports",
+                    icon: Icons.analytics_outlined),
               ],
             ),
           ]
@@ -464,8 +564,18 @@ class _AppRootState extends State<AppRoot> {
               label: "Employees",
               icon: Icons.grid_view,
               items: [
-                ModernNavItem(keyName: "employees_list", label: "Employees", icon: Icons.groups),
-                ModernNavItem(keyName: "employees_attendance", label: "Attendance", icon: Icons.schedule_outlined),
+                ModernNavItem(
+                    keyName: "employees_list",
+                    label: "Employees",
+                    icon: Icons.groups),
+                ModernNavItem(
+                    keyName: "employees_attendance",
+                    label: "Attendance",
+                    icon: Icons.schedule_outlined),
+                ModernNavItem(
+                    keyName: "login_activity",
+                    label: "Login Activity",
+                    icon: Icons.history_outlined),
               ],
             ),
             ModernNavGroup(
@@ -473,7 +583,10 @@ class _AppRootState extends State<AppRoot> {
               label: "Insights",
               icon: Icons.show_chart,
               items: [
-                ModernNavItem(keyName: "insights_attendance", label: "Time and Attendance", icon: Icons.person_search_outlined),
+                ModernNavItem(
+                    keyName: "insights_attendance",
+                    label: "Time and Attendance",
+                    icon: Icons.person_search_outlined),
               ],
             ),
           ];
@@ -482,30 +595,31 @@ class _AppRootState extends State<AppRoot> {
       body: Row(
         children: [
           ModernSidebar(
-          userName: _currentUserName,
-          profilePictureBase64: _profilePictureBase64,
-          selectedItemKey: _selectedMenuItem,
-          groups: groups,
-          expandedGroups: _expandedGroups,
-          onSelectItem: (itemKey) => setState(() => _selectedMenuItem = itemKey),
-          onToggleGroup: (groupKey) {
-            setState(() {
-              if (_expandedGroups.contains(groupKey)) {
-                _expandedGroups.remove(groupKey);
-              } else {
-                _expandedGroups.add(groupKey);
-              }
-            });
-          },
-        ),
-        Expanded(
-          child: Column(
-            children: [
-              _buildTopHeaderBar(),
-              Expanded(child: _buildAuthenticatedContent()),
-            ],
+            userName: _currentUserName,
+            profilePictureBase64: _profilePictureBase64,
+            selectedItemKey: _selectedMenuItem,
+            groups: groups,
+            expandedGroups: _expandedGroups,
+            onSelectItem: (itemKey) =>
+                setState(() => _selectedMenuItem = itemKey),
+            onToggleGroup: (groupKey) {
+              setState(() {
+                if (_expandedGroups.contains(groupKey)) {
+                  _expandedGroups.remove(groupKey);
+                } else {
+                  _expandedGroups.add(groupKey);
+                }
+              });
+            },
           ),
-        ),
+          Expanded(
+            child: Column(
+              children: [
+                _buildTopHeaderBar(),
+                Expanded(child: _buildAuthenticatedContent()),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -543,7 +657,8 @@ class _AppRootState extends State<AppRoot> {
             ),
           ),
           const Spacer(),
-          const Icon(Icons.notifications_none, color: Color(0xFF6B7280), size: 21),
+          const Icon(Icons.notifications_none,
+              color: Color(0xFF6B7280), size: 21),
           const SizedBox(width: 14),
           CircleAvatar(
             radius: 14,
@@ -553,8 +668,11 @@ class _AppRootState extends State<AppRoot> {
                 : null,
             child: _profilePictureBase64.isEmpty
                 ? Text(
-                    _currentUserName.isNotEmpty ? _currentUserName.substring(0, 1).toUpperCase() : "U",
-                    style: const TextStyle(color: Color(0xFF1D4ED8), fontWeight: FontWeight.w700),
+                    _currentUserName.isNotEmpty
+                        ? _currentUserName.substring(0, 1).toUpperCase()
+                        : "U",
+                    style: const TextStyle(
+                        color: Color(0xFF1D4ED8), fontWeight: FontWeight.w700),
                   )
                 : null,
           ),
@@ -578,11 +696,16 @@ class _AppRootState extends State<AppRoot> {
                   children: [
                     Text(
                       _currentUserName,
-                      style: const TextStyle(color: Color(0xFF111827), fontWeight: FontWeight.w600, fontSize: 14),
+                      style: const TextStyle(
+                          color: Color(0xFF111827),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
-                    Text(_isAdmin ? "Admin" : "Employee", style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
+                    Text(_isAdmin ? "Admin" : "Employee",
+                        style: const TextStyle(
+                            color: Color(0xFF6B7280), fontSize: 11)),
                   ],
                 ),
                 const SizedBox(width: 2),
@@ -632,6 +755,10 @@ class _AppRootState extends State<AppRoot> {
           onUpdateUser: _updateUser,
           onUserSelected: _onEmployeeSelected,
         );
+      case "admin_login_activity":
+        return AdminLoginActivityScreen(
+            fetchAdminLoginHistory: ({int days = 7}) =>
+                _api.fetchAdminLoginHistory(days: days));
       case "system_settings":
         return AdminScreen(
           loading: _loading,
@@ -676,6 +803,9 @@ class _AppRootState extends State<AppRoot> {
         );
       case "insights_attendance":
         return const InsightsAttendanceScreen();
+      case "login_activity":
+        return LoginActivityScreen(
+            fetchLoginHistory: (days) => _api.fetchLoginHistory(days: days));
       case "payroll_salary":
         return const PayrollSalaryScreen();
       case "payroll_reports":
@@ -699,7 +829,9 @@ class _AppRootState extends State<AppRoot> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          Text(title,
+              style:
+                  const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Text(message, style: const TextStyle(color: Colors.black54)),
         ],

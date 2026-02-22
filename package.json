@@ -3,18 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "backend",
+    "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev:backend": "npm --workspace backend run dev",
-    "build:backend": "npm --workspace backend run build",
-    "lint:backend": "npm --workspace backend run lint",
-    "test:backend": "npm --workspace backend run test",
-    "dev:web": "npm --workspace backend run dev",
-    "build:web": "npm --workspace backend run build",
-    "lint:web": "npm --workspace backend run lint",
-    "test:web": "npm --workspace backend run test"
+    "dev:backend": "npm --workspace @workforce/web run dev",
+    "build:backend": "npm --workspace @workforce/web run build",
+    "lint:backend": "npm --workspace @workforce/web run lint",
+    "test:backend": "npm --workspace @workforce/web run test",
+    "dev:web": "npm --workspace @workforce/web run dev",
+    "build:web": "npm --workspace @workforce/web run build",
+    "lint:web": "npm --workspace @workforce/web run lint",
+    "test:web": "npm --workspace @workforce/web run test"
   },
   "keywords": [],
   "license": "MIT",
