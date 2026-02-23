@@ -5,6 +5,7 @@ import { Role, User } from "@/src/db/models";
 import { hashPassword } from "@/src/lib/password";
 import { requirePermission } from "@/src/lib/request-auth";
 import { writeAuditLog } from "@/src/audit/log";
+import { sendEmployeeInviteEmail } from "@/src/lib/mailer";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -66,6 +67,14 @@ export async function POST(req: NextRequest) {
     email: created.email,
   });
 
+  // Try sending a template invitation email!
+  await sendEmployeeInviteEmail(
+    parsed.data.email.toLowerCase(),
+    parsed.data.displayName,
+    parsed.data.employeeCode,
+    parsed.data.password // Unhashed temporary password intentionally passed for the email
+  );
+
   return NextResponse.json({
     user: {
       id: created._id.toString(),
@@ -74,3 +83,4 @@ export async function POST(req: NextRequest) {
     },
   });
 }
+

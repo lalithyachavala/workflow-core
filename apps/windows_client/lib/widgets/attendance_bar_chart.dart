@@ -1,6 +1,37 @@
 import "package:flutter/material.dart";
 import "package:fl_chart/fl_chart.dart";
 
+void _showCustomDaysDialog(BuildContext context, int currentDays, void Function(int) onDaysChanged) {
+  final controller = TextEditingController(text: currentDays.toString());
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text("Custom days"),
+      content: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          labelText: "Number of days (1–365)",
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+        TextButton(
+          onPressed: () {
+            final n = int.tryParse(controller.text);
+            if (n != null && n >= 1 && n <= 365) {
+              onDaysChanged(n);
+              Navigator.pop(ctx);
+            }
+          },
+          child: const Text("Apply"),
+        ),
+      ],
+    ),
+  );
+}
+
 class AttendanceBarChart extends StatelessWidget {
   const AttendanceBarChart({
     super.key,
@@ -8,12 +39,16 @@ class AttendanceBarChart extends StatelessWidget {
     this.title = "Hours Worked by Day",
     this.maxBarWidth = 16,
     this.chartHeight = 180,
+    this.selectedDays,
+    this.onDaysChanged,
   });
 
   final List<dynamic> hoursByDay;
   final String title;
   final double maxBarWidth;
   final double chartHeight;
+  final int? selectedDays;
+  final void Function(int days)? onDaysChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -41,12 +76,34 @@ class AttendanceBarChart extends StatelessWidget {
       },
     );
 
+    final hasFilters = selectedDays != null && onDaysChanged != null;
+    const presetDays = [7, 15, 30, 60];
+
     return SizedBox(
-      height: chartHeight + 60,
+      height: chartHeight + (hasFilters ? 100 : 60),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          if (hasFilters) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ...presetDays.map((d) => FilterChip(
+                  label: Text("$d"),
+                  selected: selectedDays == d,
+                  onSelected: (_) => onDaysChanged!(d),
+                )),
+                FilterChip(
+                  label: const Text("Custom"),
+                  selected: selectedDays != null && !presetDays.contains(selectedDays),
+                  onSelected: (_) => _showCustomDaysDialog(context, selectedDays ?? 7, onDaysChanged!),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           Expanded(
             child: BarChart(

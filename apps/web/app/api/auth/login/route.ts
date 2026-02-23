@@ -42,11 +42,12 @@ export async function POST(req: NextRequest) {
   const roles = await Role.find({ _id: { $in: user.roleIds } }).lean();
   const roleNames = roles.map((role) => role.name);
 
-  // Collect login analytics for employees, skipping admins
+  // Record login from this device/location for the user (any device, any location)
   const isEmployee = roleNames.includes("employee");
   const isAdmin = roleNames.includes("admin");
+  const recordLoginHistory = isEmployee && !isAdmin;
 
-  if (isEmployee && !isAdmin) {
+  if (recordLoginHistory) {
     const publicIp = req.headers.get("X-Public-Ip") || req.headers.get("x-public-ip");
     const ipAddress = publicIp || getClientIp(req) || "Unknown";
 

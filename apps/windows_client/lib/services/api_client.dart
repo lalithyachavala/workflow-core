@@ -52,24 +52,43 @@ class ApiClient {
     return (json["hasTemplate"] ?? false) as bool;
   }
 
-  Future<void> verifyFaceForLogin(List<double> embedding) async {
-    final json =
-        await _authedPost("/auth/verify-face", {"embedding": embedding});
+  /// Use right after login with the accessToken from the response so we don't rely on
+  /// token store read-after-write (avoids enroll shown every time on some platforms).
+  Future<bool> hasFaceTemplateWithToken(String accessToken) async {
+    final res = await http.get(
+      Uri.parse("$baseUrl/auth/face-status"),
+      headers: {"Authorization": "Bearer $accessToken"},
+    );
+    if (res.statusCode >= 400) {
+      throw Exception("Request failed: ${res.body}");
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return (json["hasTemplate"] ?? false) as bool;
+  }
+
+  Future<void> verifyFaceForLogin(String imageBase64) async {
+    final json = await _authedPost("/auth/verify-face", {
+      "imageBase64": imageBase64,
+    });
     if (json["ok"] != true) {
       throw Exception(json["message"] ?? "Face verification failed.");
     }
   }
 
-  Future<void> enrollMyFace(List<double> embedding, String pose,
-      {String? profileImageBase64}) async {
-    final body = <String, dynamic>{"embedding": embedding, "pose": pose};
-    if (profileImageBase64 != null && profileImageBase64.isNotEmpty) {
-      body["profileImageBase64"] = profileImageBase64;
-    }
-    final json = await _authedPost("/auth/enroll-face", body);
+  /// Returns message and employeeCode when no images; or use enrollMyFaceWithImages for in-app registration.
+  Future<Map<String, dynamic>> getEnrollFaceInfo() async {
+    return _authedPost("/auth/enroll-face", {});
+  }
+
+  /// Register face in-app: send 5–15 base64 images to LBPH via Next.js.
+  Future<Map<String, dynamic>> enrollMyFaceWithImages(List<String> imageBase64List) async {
+    final json = await _authedPost("/auth/enroll-face", {
+      "imageBase64List": imageBase64List,
+    });
     if (json["ok"] != true) {
-      throw Exception(json["message"] ?? "Face enrollment failed.");
+      throw Exception(json["message"] ?? "Face registration failed.");
     }
+    return json;
   }
 
   Future<void> clearTokens() async {
@@ -95,8 +114,10 @@ class ApiClient {
     return (json["user"] ?? {}) as Map<String, dynamic>;
   }
 
-  Future<void> clockIn(List<double> embedding) async {
-    await _clock("/attendance/clock-in", embedding);
+  Future<void> clockIn(String imageBase64) async {
+    await _clockWithMessage("/attendance/clock-in", imageBase64);
+  }
+
   Future<List<dynamic>> fetchLoginHistory({int days = 7}) async {
     final json = await _authedGet("/auth/login-history?days=$days");
     return (json["history"] ?? []) as List<dynamic>;
@@ -107,12 +128,8 @@ class ApiClient {
     return (json["history"] ?? []) as List<dynamic>;
   }
 
-  Future<void> clockIn(String imageBase64) async {
-    await _clock("/attendance/clock-in", imageBase64);
-  }
-
-  Future<void> clockOut(List<double> embedding) async {
-    await _clock("/attendance/clock-out", embedding);
+  Future<void> clockOut(String imageBase64) async {
+    await _clockWithMessage("/attendance/clock-out", imageBase64);
   }
 
   Future<Map<String, dynamic>> fetchToday() async {
@@ -179,8 +196,9 @@ class ApiClient {
     return (json["alerts"] ?? []) as List<dynamic>;
   }
 
-  Future<void> enrollFace(String userId, String imageBase64) async {
-    await _authedPost("/face/enroll", {
+  /// Returns server message and employeeCode; face registration is via register_face.py.
+  Future<Map<String, dynamic>> enrollFace(String userId, String imageBase64) async {
+    return _authedPost("/face/enroll", {
       "userId": userId,
       "imageBase64": imageBase64,
     });
@@ -219,21 +237,55 @@ class ApiClient {
     await _authedDelete("/admin/company-structures/$id");
   }
 
-  Future<void> _clock(String path, List<double> embedding) async {
-    final payload = await _buildClockPayload(embedding);
-    await _authedPost(path, payload.toJson());
+  Future<void> _clockWithMessage(String path, String imageBase64) async {
+    final payload = await _buildClockPayload(imageBase64);
+    var accessToken = await _tokenStore.getAccessToken();
+    if (accessToken == null) throw Exception("No access token.");
+    var res = await http.post(
+      Uri.parse("$baseUrl$path"),
+      headers: {"Authorization": "Bearer $accessToken", "Content-Type": "application/json"},
+      body: jsonEncode(payload.toJson()),
+    );
+    if (res.statusCode == 401) {
+      accessToken = await _refreshToken();
+      res = await http.post(
+        Uri.parse("$baseUrl$path"),
+        headers: {"Authorization": "Bearer $accessToken", "Content-Type": "application/json"},
+        body: jsonEncode(payload.toJson()),
+      );
+    }
+    if (res.statusCode >= 400) {
+      String msg = "Request failed.";
+      try {
+        final json = jsonDecode(res.body) as Map<String, dynamic>?;
+        if (json != null && json["message"] != null) msg = json["message"].toString();
+      } catch (_) {}
+      throw Exception(msg);
+    }
   }
 
-  Future<ClockPayload> _buildClockPayload(List<double> embedding) async {
-    final windows = await DeviceInfoPlugin().windowsInfo;
-    final packageInfo = await PackageInfo.fromPlatform();
-
+  Future<ClockPayload> _buildClockPayload(String imageBase64) async {
+    String deviceId = "";
+    String hostname = "unknown";
+    String osVersion = "unknown";
+    String appVersion = "1.0";
+    try {
+      final windows = await DeviceInfoPlugin().windowsInfo;
+      final packageInfo = await PackageInfo.fromPlatform();
+      deviceId = windows.deviceId.isNotEmpty ? windows.deviceId : "win-${windows.computerName}";
+      hostname = windows.computerName.isNotEmpty ? windows.computerName : "Windows";
+      osVersion = windows.displayVersion.isNotEmpty ? windows.displayVersion : "10";
+      appVersion = packageInfo.version.isNotEmpty ? packageInfo.version : "1.0";
+      if (deviceId.length < 3) deviceId = "win-$hostname";
+    } catch (_) {
+      deviceId = "win-unknown";
+    }
     return ClockPayload(
-      embedding: embedding,
-      deviceFingerprint: windows.deviceId,
-      hostname: windows.computerName,
-      osVersion: windows.displayVersion,
-      appVersion: packageInfo.version,
+      imageBase64: imageBase64,
+      deviceFingerprint: deviceId,
+      hostname: hostname,
+      osVersion: osVersion,
+      appVersion: appVersion,
     );
   }
 

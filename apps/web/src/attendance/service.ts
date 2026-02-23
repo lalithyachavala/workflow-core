@@ -38,7 +38,6 @@ export async function registerDevice(params: {
   );
 }
 
-
 export async function clockIn(params: {
   userId: string;
   ip: string;

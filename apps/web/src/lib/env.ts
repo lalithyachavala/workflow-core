@@ -7,4 +7,6 @@ export const env = {
   geoFallbackCountry: process.env.GEOIP_FALLBACK_COUNTRY || "Unknown",
   /** 32-byte hex key for AES-GCM embedding encryption. Generate: openssl rand -hex 32 */
   faceEmbeddingKey: process.env.FACE_EMBEDDING_KEY || "0000000000000000000000000000000000000000000000000000000000000000",
+  /** LBPH face service URL (e.g. http://localhost:8000) for face verification. */
+  lbphServiceUrl: process.env.LBPH_FACE_SERVICE_URL || "http://localhost:8000",
 };

@@ -71,6 +71,8 @@ class _AppRootState extends State<AppRoot> {
   String _selectedMenuItem = "admin_dashboard";
   Set<String> _expandedGroups = {"admin"};
   int _totalSeconds = 0;
+  int _hoursChartDays = 30;
+  int _employeeChartDays = 7;
   List<dynamic> _sessions = [];
   List<dynamic> _hoursByDay = [];
   List<dynamic> _roles = [];
@@ -103,10 +105,16 @@ class _AppRootState extends State<AppRoot> {
           : "${localPart[0].toUpperCase()}${localPart.substring(1)}";
       _selectedMenuItem = _isAdmin ? "admin_dashboard" : "employees_attendance";
       _expandedGroups = _isAdmin ? {"admin"} : {"employees"};
+      // Returning users with enrolled face: verify only (one capture). New users: enroll (3 poses).
+      // Use token from login response so we don't rely on token store read-after-write.
       try {
-        _faceEnrollMode = !(await _api.hasFaceTemplate());
+        final accessToken = login["accessToken"]?.toString();
+        final hasTemplate = accessToken != null && accessToken.isNotEmpty
+            ? await _api.hasFaceTemplateWithToken(accessToken)
+            : await _api.hasFaceTemplate();
+        _faceEnrollMode = !hasTemplate;
       } catch (_) {
-        _faceEnrollMode = false;
+        _faceEnrollMode = false; // on error, show verify; backend will say "enroll first" if no template
       }
     } catch (e) {
       _error = e.toString();
@@ -117,14 +125,16 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
-  Future<void> _verifyFaceForLogin(List<double> embedding) async {
-    await _api.verifyFaceForLogin(embedding);
+  Future<void> _verifyFaceForLogin(String imageBase64) async {
+    await _api.verifyFaceForLogin(imageBase64);
   }
 
-  Future<void> _enrollMyFace(List<double> embedding, String pose,
-      {String? profileImageBase64}) async {
-    await _api.enrollMyFace(embedding, pose,
-        profileImageBase64: profileImageBase64);
+  Future<Map<String, dynamic>> _getEnrollFaceInfo() async {
+    return _api.getEnrollFaceInfo();
+  }
+
+  Future<void> _enrollWithImages(List<String> imageBase64List) async {
+    await _api.enrollMyFaceWithImages(imageBase64List);
   }
 
   void _onFaceVerified() {
@@ -145,8 +155,7 @@ class _AppRootState extends State<AppRoot> {
       _selectedEmployeeAttendance = {};
     });
     try {
-      final att =
-          await _api.fetchUserAttendance(user["_id"].toString(), days: 30);
+      final att = await _api.fetchUserAttendance(user["_id"].toString(), days: _employeeChartDays);
       if (mounted && _selectedEmployee?["_id"] == user["_id"]) {
         setState(() => _selectedEmployeeAttendance = att);
       }
@@ -171,7 +180,7 @@ class _AppRootState extends State<AppRoot> {
       final futures = await Future.wait([
         _api.fetchToday(),
         _api.fetchSummary(),
-        _api.fetchMyHoursByDay(days: 30),
+        _api.fetchMyHoursByDay(days: _hoursChartDays),
         _api.fetchCurrentUser(),
         if (_isAdmin) _api.fetchRoles() else Future.value(<dynamic>[]),
         if (_isAdmin)
@@ -205,6 +214,10 @@ class _AppRootState extends State<AppRoot> {
           _sessions = sessions;
           _hoursByDay = hoursByDay;
           final profile = currentUser["profile"] as Map<String, dynamic>?;
+          final displayName = profile?["displayName"]?.toString().trim();
+          if (displayName != null && displayName.isNotEmpty) {
+            _currentUserName = displayName;
+          }
           _profilePictureBase64 =
               profile?["profilePictureBase64"]?.toString() ?? "";
           _roles = roles;
@@ -322,7 +335,14 @@ class _AppRootState extends State<AppRoot> {
   Future<void> _enrollFace(String userId, String imageBase64) async {
     setState(() => _loading = true);
     try {
-      await _api.enrollFace(userId, imageBase64);
+      final res = await _api.enrollFace(userId, imageBase64);
+      if (mounted) {
+        final code = res["employeeCode"]?.toString() ?? "";
+        final msg = res["message"]?.toString() ?? "";
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Employee code for face registration: $code. $msg")),
+        );
+      }
       await _refresh();
     } finally {
       if (mounted) {
@@ -331,10 +351,10 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
-  Future<void> _clockIn(List<double> embedding) async {
+  Future<void> _clockIn(String imageBase64) async {
     setState(() => _loading = true);
     try {
-      await _api.clockIn(embedding);
+      await _api.clockIn(imageBase64);
       await _refresh();
     } catch (e) {
       if (mounted) {
@@ -352,10 +372,10 @@ class _AppRootState extends State<AppRoot> {
     await _api.reportAwayAlert();
   }
 
-  Future<void> _clockOut(List<double> embedding) async {
+  Future<void> _clockOut(String imageBase64) async {
     setState(() => _loading = true);
     try {
-      await _api.clockOut(embedding);
+      await _api.clockOut(imageBase64);
       await _refresh();
     } catch (e) {
       if (mounted) {
@@ -402,7 +422,8 @@ class _AppRootState extends State<AppRoot> {
     if (_needsFaceVerification) {
       return FaceVerificationLoginScreen(
         onVerify: _verifyFaceForLogin,
-        onEnroll: _enrollMyFace,
+        onEnrollInfo: _getEnrollFaceInfo,
+        onEnrollWithImages: _enrollWithImages,
         onVerified: _onFaceVerified,
         onVerificationFailed: _onFaceVerificationFailed,
         onBackToLogin: () {
@@ -461,7 +482,7 @@ class _AppRootState extends State<AppRoot> {
                     icon: Icons.groups),
                 ModernNavItem(
                     keyName: "admin_login_activity",
-                    label: "Employee Login Activity",
+                    label: "Login Activity",
                     icon: Icons.history_outlined),
               ],
             ),
@@ -721,11 +742,16 @@ class _AppRootState extends State<AppRoot> {
   Widget _buildAuthenticatedContent() {
     switch (_selectedMenuItem) {
       case "admin_dashboard":
-        return ModernDashboardScreen(
+        return           ModernDashboardScreen(
           metrics: _dashboardMetrics,
           events: _events,
           awayAlerts: _awayAlerts,
           hoursByDay: _hoursByDay,
+          hoursChartDays: _hoursChartDays,
+          onHoursChartDaysChanged: (d) {
+            setState(() => _hoursChartDays = d);
+            _refresh();
+          },
           onRefresh: _refresh,
         );
       case "admin_company_structure":
@@ -750,6 +776,11 @@ class _AppRootState extends State<AppRoot> {
           selectedUser: _selectedEmployee,
           selectedUserAttendance: _selectedEmployeeAttendance,
           isAdmin: _isAdmin,
+          employeeChartDays: _employeeChartDays,
+          onEmployeeChartDaysChanged: (d) {
+            setState(() => _employeeChartDays = d);
+            if (_selectedEmployee != null) _onEmployeeSelected(_selectedEmployee!);
+          },
           onRefresh: _refresh,
           onCreateUser: _createUser,
           onUpdateUser: _updateUser,
@@ -795,11 +826,16 @@ class _AppRootState extends State<AppRoot> {
           totalSeconds: _totalSeconds,
           events: _sessions,
           hoursByDay: _hoursByDay,
+          hoursChartDays: _hoursChartDays,
           loading: _loading,
           onRefresh: _refresh,
           onClockIn: _clockIn,
           onClockOut: _clockOut,
           onReportAway: _reportAwayAlert,
+          onHoursChartDaysChanged: (d) {
+            setState(() => _hoursChartDays = d);
+            _refresh();
+          },
         );
       case "insights_attendance":
         return const InsightsAttendanceScreen();

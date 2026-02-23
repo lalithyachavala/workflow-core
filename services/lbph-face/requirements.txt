@@ -1,0 +1,7 @@
+# LBPH Face service - based on https://huggingface.co/abi-0165/face-attendance-system
+# Use opencv-contrib-python (not opencv-python) for cv2.face
+opencv-contrib-python>=4.8.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+numpy>=1.24.0

@@ -40,18 +40,28 @@ function decryptEmbedding(encryptedBase64: string): number[] {
   return Array.from(new Float32Array(plain.buffer, plain.byteOffset, plain.length / 4));
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
-  const len = Math.min(a.length, b.length);
-  let dot = 0;
-  let magA = 0;
-  let magB = 0;
-  for (let i = 0; i < len; i += 1) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
+/** L2-normalize embedding to unit length. */
+function l2Normalize(vec: number[]): number[] {
+  let na = 0;
+  for (let i = 0; i < vec.length; i += 1) {
+    na += vec[i] * vec[i];
   }
-  if (magA === 0 || magB === 0) return 0;
-  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
+  const norm = Math.sqrt(na);
+  if (norm < 1e-12) return vec.map(() => 0);
+  return vec.map((v) => v / norm);
+}
+
+/** Cosine similarity per spec. Assumes L2-normalized vectors for dot = similarity. */
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
 
 export async function updateProfilePicture(userId: string, imageBase64: string) {
@@ -67,8 +77,9 @@ export async function enrollFace(userId: string, embedding: number[], pose: Pose
   if (!Array.isArray(embedding) || embedding.length !== 512) {
     throw new Error("Embedding must be 512 floats");
   }
+  const normalized = l2Normalize(embedding);
   const field = pose === "front" ? "embeddingFront" : pose === "left" ? "embeddingLeft" : "embeddingRight";
-  const encrypted = encryptEmbedding(embedding);
+  const encrypted = encryptEmbedding(normalized);
   await FaceTemplate.findOneAndUpdate(
     { userId },
     { [field]: encrypted, modelVersion: MODEL_VERSION, status: "active" },
@@ -79,11 +90,22 @@ export async function enrollFace(userId: string, embedding: number[], pose: Pose
   }
 }
 
-/** Verify incoming embedding against stored poses. Returns best score across front/left/right. */
-export async function verifyFace(userId: string, embedding: number[]) {
+export type VerifyFaceParams = {
+  userId: string;
+  embedding: number[];
+  livenessPassed: boolean;
+};
+
+/** Verify incoming embedding against stored poses. Uses strict threshold 0.80. */
+export async function verifyFace(params: VerifyFaceParams) {
+  const { userId, embedding, livenessPassed } = params;
   if (!Array.isArray(embedding) || embedding.length !== 512) {
     return { score: 0, accepted: false, reason: "invalid_embedding" as const };
   }
+  if (!livenessPassed) {
+    return { score: 0, accepted: false, reason: "liveness_failed" as const };
+  }
+  const normalized = l2Normalize(embedding);
   const template = await FaceTemplate.findOne({ userId }).lean();
   if (!template) {
     return { score: 0, accepted: false, reason: "no_template" as const };
@@ -110,14 +132,13 @@ export async function verifyFace(userId: string, embedding: number[]) {
     return { score: 0, accepted: false, reason: "no_template" as const };
   }
 
-  let bestScore = 0;
-  for (const s of stored) {
-    const score = cosineSimilarity(embedding, s);
-    if (score > bestScore) bestScore = score;
-  }
+  const scores = stored.map((s) => cosineSimilarity(normalized, s));
+  const bestScore = Math.max(...scores);
 
-  const threshold = 0.32; // ArcFace cosine similarity; same person usually 0.4+
-  const accepted = bestScore >= threshold;
+  // Strict threshold per spec: same person 0.80–0.95, different person <0.55
+  const THRESHOLD = 0.8;
+  const accepted = bestScore >= THRESHOLD;
+
   return {
     score: bestScore,
     accepted,
