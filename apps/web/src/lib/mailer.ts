@@ -3,11 +3,12 @@ import nodemailer from "nodemailer";
 // Creates a transporter strictly for basic local/development testing via Ethereal or specific SMTP variables
 // To use a provider like Sendgrid, configure these process.env variables.
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.ethereal.email",
-    port: parseInt(process.env.SMTP_PORT || "587"),
+    host: process.env.EMAIL_HOST || process.env.SMTP_HOST || "smtp.ethereal.email",
+    port: parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || "587"),
+    secure: parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || "587") === 465,
     auth: {
-        user: process.env.SMTP_USER || "test_user",
-        pass: process.env.SMTP_PASS || "test_password",
+        user: process.env.EMAIL_USER || process.env.SMTP_USER || "test_user",
+        pass: process.env.EMAIL_PASS || process.env.SMTP_PASS || "test_password",
     },
 });
 

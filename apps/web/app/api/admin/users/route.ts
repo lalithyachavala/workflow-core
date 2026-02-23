@@ -67,13 +67,13 @@ export async function POST(req: NextRequest) {
     email: created.email,
   });
 
-  // Try sending a template invitation email!
-  await sendEmployeeInviteEmail(
+  // Try sending a template invitation email asynchronously so it doesn't block the UI!
+  sendEmployeeInviteEmail(
     parsed.data.email.toLowerCase(),
     parsed.data.displayName,
     parsed.data.employeeCode,
     parsed.data.password // Unhashed temporary password intentionally passed for the email
-  );
+  ).catch(console.error);
 
   return NextResponse.json({
     user: {

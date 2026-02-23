@@ -49,21 +49,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   _EmployeesTab _activeTab = _EmployeesTab.employees;
   final _search = TextEditingController();
   int _selectedIndex = 0;
-  final List<Map<String, String>> _demoEmployees = const [
-    {
-      "name": "test employee",
-      "employeeNumber": "A9132",
-      "email": "test.employee@example.com",
-      "phone": "9876543210",
-      "timezone": "Asia/Kolkata",
-      "department": "Engineering",
-      "jobTitle": "QA Analyst",
-      "manager": "test manager",
-      "nationality": "Indian",
-      "dob": "1998-04-16",
-      "gender": "Male",
-    },
-  ];
+  final List<Map<String, String>> _demoEmployees = const [];
 
   @override
   void dispose() {
@@ -103,14 +89,20 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
-              await widget.onCreateUser({
-                "email": email.text.trim(),
-                "password": password.text.trim(),
-                "displayName": displayName.text.trim(),
-                "employeeCode": employeeCode.text.trim(),
-                "roleNames": roleNames.text.trim().split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
-              });
-              if (context.mounted) Navigator.pop(context);
+              try {
+                await widget.onCreateUser({
+                  "email": email.text.trim(),
+                  "password": password.text.trim(),
+                  "displayName": displayName.text.trim(),
+                  "employeeCode": employeeCode.text.trim(),
+                  "roleNames": roleNames.text.trim().split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+                });
+                if (context.mounted) Navigator.pop(context);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+                }
+              }
             },
             child: const Text("Save"),
           ),
@@ -286,8 +278,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            ElevatedButton.icon(onPressed: () {}, icon: const Icon(Icons.send_outlined), label: const Text("Invite an Employee")),
-            OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.person_add_alt_1_outlined), label: const Text("Add a New Employee")),
+            ElevatedButton.icon(
+              onPressed: widget.isAdmin ? () => _openCreateUserDialog(context) : null,
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              label: const Text("Invite / Add Employee")
+            ),
             OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.filter_alt_outlined), label: const Text("Filter Employees")),
           ],
         ),
