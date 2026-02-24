@@ -97,6 +97,8 @@ class ApiClient {
 
   Future<void> clockIn(List<double> embedding) async {
     await _clock("/attendance/clock-in", embedding);
+  }
+
   Future<List<dynamic>> fetchLoginHistory({int days = 7}) async {
     final json = await _authedGet("/auth/login-history?days=$days");
     return (json["history"] ?? []) as List<dynamic>;
@@ -107,9 +109,6 @@ class ApiClient {
     return (json["history"] ?? []) as List<dynamic>;
   }
 
-  Future<void> clockIn(String imageBase64) async {
-    await _clock("/attendance/clock-in", imageBase64);
-  }
 
   Future<void> clockOut(List<double> embedding) async {
     await _clock("/attendance/clock-out", embedding);

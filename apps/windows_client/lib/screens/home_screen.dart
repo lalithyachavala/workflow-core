@@ -5,6 +5,7 @@ import "package:flutter_inactive_timer/flutter_inactive_timer.dart";
 import "../widgets/attendance_bar_chart.dart";
 import "face_detection_screen.dart";
 import "face_capture_for_clock_screen.dart";
+import 'package:audioplayers/audioplayers.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -36,30 +37,79 @@ class _HomeScreenState extends State<HomeScreen> {
   FlutterInactiveTimer? _inactiveTimer;
   Timer? _adminNotifyTimer;
   bool _awayDialogShown = false;
+  AudioPlayer? _buzzerPlayer;
 
   bool get _hasOpenSession =>
       widget.events.any((s) => s["clockOutAt"] == null || s["clockOutAt"] == "");
 
-  /// Plays a clear buzzer burst (4 times) exactly at the 10 min mark only.
-  void _playBuzzerBurst() {
-    Future<void> play() async {
-      for (var i = 0; i < 4; i++) {
-        SystemSound.play(SystemSoundType.alert);
-        await Future<void>.delayed(const Duration(milliseconds: 450));
-      }
+  void _startIdleMonitoringIfNeeded() {
+    if (_hasOpenSession) {
+      _startIdleMonitoring();
+    } else {
+      _stopIdleMonitoring();
     }
-    play();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _startIdleMonitoringIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _startIdleMonitoringIfNeeded();
+  }
+
+  Future<void> _startBuzzer() async {
+    _buzzerPlayer ??= AudioPlayer();
+    try {
+      print('Buzzer: Starting buzzer playback...');
+      await _buzzerPlayer!.setVolume(1.0);
+      await _buzzerPlayer!.setReleaseMode(ReleaseMode.loop);
+      await _buzzerPlayer!.play(AssetSource('buzzermp3ver.mp3'));
+      print('Buzzer: Playback started');
+    } catch (e) {
+      print('Error starting buzzer: $e');
+      // Fallback: Play system alert sounds repeatedly
+      _playBuzzerFallback();
+    }
+  }
+
+  void _playBuzzerFallback() {
+    // Play system alert 5 times as fallback
+    for (int i = 0; i < 5; i++) {
+      Future.delayed(Duration(milliseconds: i * 500), () {
+        SystemSound.play(SystemSoundType.alert);
+      });
+    }
+  }
+
+  Future<void> _stopBuzzer() async {
+    if (_buzzerPlayer != null) {
+      try {
+        await _buzzerPlayer!.stop();
+        await _buzzerPlayer!.release();
+        print('Buzzer: Stopped');
+      } catch (e) {
+        print('Error stopping buzzer: $e');
+      }
+      _buzzerPlayer = null;
+    }
   }
 
   void _on10MinAway() {
     if (_awayDialogShown || !mounted) return;
     _awayDialogShown = true;
-    _playBuzzerBurst(); // Buzzer: 3-4 short beeps at 10 min mark only
+    print('Inactivity: 10 min away - starting buzzer');
+    _startBuzzer(); // Start buzzer at 10 min mark
 
     // At 15 min (5 min after 10-min warning), report to admin and notify employee
     _adminNotifyTimer = Timer(const Duration(minutes: 5), () async {
       _adminNotifyTimer?.cancel();
       _adminNotifyTimer = null;
+      await _stopBuzzer(); // Stop buzzer at 15 min mark
       try {
         await widget.onReportAway();
       } catch (_) {}
@@ -78,6 +128,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () {
                   _awayDialogShown = false;
                   Navigator.of(ctx).pop();
+                  // Restart monitoring for next inactivity cycle
+                  if (_hasOpenSession) {
+                    _startIdleMonitoring();
+                  }
                 },
                 child: const Text("OK"),
               ),
@@ -99,20 +153,30 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               _adminNotifyTimer?.cancel();
               _adminNotifyTimer = null;
               _awayDialogShown = false;
+              await _stopBuzzer(); // Stop buzzer when user shows activity
               Navigator.of(ctx).pop();
+              // Restart monitoring for next inactivity cycle
+              if (_hasOpenSession) {
+                _startIdleMonitoring();
+              }
             },
             child: const Text("I'm Back"),
           ),
         ],
       ),
-    ).then((_) {
+    ).then((_) async {
       _awayDialogShown = false;
       _adminNotifyTimer?.cancel();
       _adminNotifyTimer = null;
+      await _stopBuzzer();
+      // Restart monitoring for next inactivity cycle
+      if (_hasOpenSession) {
+        _startIdleMonitoring();
+      }
     });
   }
 
@@ -133,16 +197,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _adminNotifyTimer?.cancel();
     _adminNotifyTimer = null;
     _awayDialogShown = false;
+    _stopBuzzer();
   }
 
-  @override
-  void didUpdateWidget(HomeScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_hasOpenSession) {
-      _startIdleMonitoring();
-    } else {
-      _stopIdleMonitoring();
-    }
+  Future<void> _onClockIn(List<double> embedding) async {
+    await widget.onClockIn(embedding);
+    _startIdleMonitoring();
+  }
+
+  Future<void> _onClockOut(List<double> embedding) async {
+    await widget.onClockOut(embedding);
+    _stopIdleMonitoring();
   }
 
   @override
@@ -187,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           MaterialPageRoute<void>(
                             builder: (_) => FaceCaptureForClockScreen(
                               title: "Clock In (Face Verify)",
-                              onCaptured: (embedding) => widget.onClockIn(embedding),
+                              onCaptured: (embedding) => _onClockIn(embedding),
                             ),
                           ),
                         ),
@@ -202,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           MaterialPageRoute<void>(
                             builder: (_) => FaceCaptureForClockScreen(
                               title: "Clock Out (Face Verify)",
-                              onCaptured: (embedding) => widget.onClockOut(embedding),
+                              onCaptured: (embedding) => _onClockOut(embedding),
                             ),
                           ),
                         ),
