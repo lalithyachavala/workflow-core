@@ -2,6 +2,7 @@ import "dart:math" as math;
 import "dart:typed_data";
 import "package:flutter/services.dart";
 import "package:onnxruntime/onnxruntime.dart";
+import "package:flutter/foundation.dart";
 import "package:image/image.dart" as img;
 
 class FaceDetectorService {
@@ -31,9 +32,9 @@ class FaceDetectorService {
     // Usually HuggingFace models specify one main default input tensor.
     try {
         _inputName = _session.inputNames.first;
-        print("Loaded YuNet Model. Expected Input Tensor Name: $_inputName");
+        debugPrint("Loaded YuNet Model. Expected Input Tensor Name: $_inputName");
     } catch (e) {
-        print("Could not retrieve input name: $e");
+        debugPrint("Could not retrieve input name: $e");
     }
     
     _isInit = true;
