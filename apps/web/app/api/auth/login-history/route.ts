@@ -13,8 +13,8 @@ export async function GET(req: NextRequest) {
         }
 
         const { searchParams } = new URL(req.url);
-        const daysParam = parseInt(searchParams.get("days") || "7", 10);
-        const limit = parseInt(searchParams.get("limit") || "100", 10);
+        const daysParam = Math.min(365, Math.max(1, parseInt(searchParams.get("days") || "7", 10)));
+        const limit = daysParam > 90 ? 500 : 200;
 
         const fromDate = new Date();
         fromDate.setDate(fromDate.getDate() - daysParam);

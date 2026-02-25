@@ -3,6 +3,7 @@ import { connectMongo } from "@/src/lib/mongodb";
 import { requireAuth } from "@/src/lib/request-auth";
 import { getTodaySummary } from "@/src/attendance/service";
 
+/** Today's attendance from DB (sessions + totalSeconds). Persisted so it shows on every login. */
 export async function GET(req: NextRequest) {
   await connectMongo();
   const user = await requireAuth(req);

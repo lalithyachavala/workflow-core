@@ -6,6 +6,8 @@ const userSchema = new Schema(
     passwordHash: { type: String, required: true },
     roleIds: [{ type: Schema.Types.ObjectId, ref: "Role" }],
     isActive: { type: Boolean, default: true },
+    faceVerifyFailedAttempts: { type: Number, default: 0 },
+    faceVerifyLockedUntil: { type: Date, default: null },
     profile: {
       displayName: { type: String, default: "" },
       profilePictureBase64: { type: String, default: "" },

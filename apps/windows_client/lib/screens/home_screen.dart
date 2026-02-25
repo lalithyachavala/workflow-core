@@ -3,7 +3,6 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_inactive_timer/flutter_inactive_timer.dart";
 import "../widgets/attendance_bar_chart.dart";
-import "face_detection_screen.dart";
 import "face_capture_for_clock_screen.dart";
 import 'package:audioplayers/audioplayers.dart';
 
@@ -13,21 +12,25 @@ class HomeScreen extends StatefulWidget {
     required this.totalSeconds,
     required this.events,
     required this.hoursByDay,
+    required this.hoursChartDays,
     required this.loading,
     required this.onRefresh,
     required this.onClockIn,
     required this.onClockOut,
     required this.onReportAway,
+    this.onHoursChartDaysChanged,
   });
 
   final int totalSeconds;
   final List<dynamic> events;
   final List<dynamic> hoursByDay;
+  final int hoursChartDays;
   final bool loading;
   final Future<void> Function() onRefresh;
-  final Future<void> Function(List<double> embedding) onClockIn;
-  final Future<void> Function(List<double> embedding) onClockOut;
+  final Future<void> Function(String imageBase64) onClockIn;
+  final Future<void> Function(String imageBase64) onClockOut;
   final Future<void> Function() onReportAway;
+  final void Function(int days)? onHoursChartDaysChanged;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -36,42 +39,62 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   FlutterInactiveTimer? _inactiveTimer;
   Timer? _adminNotifyTimer;
+  Timer? _elapsedTimer;
   bool _awayDialogShown = false;
   AudioPlayer? _buzzerPlayer;
 
   bool get _hasOpenSession =>
       widget.events.any((s) => s["clockOutAt"] == null || s["clockOutAt"] == "");
 
-  void _startIdleMonitoringIfNeeded() {
-    if (_hasOpenSession) {
-      _startIdleMonitoring();
-    } else {
-      _stopIdleMonitoring();
+  int get _displayTotalSeconds {
+    if (!_hasOpenSession) return widget.totalSeconds;
+    final open = widget.events.cast<Map<String, dynamic>>().firstWhere(
+          (s) => s["clockOutAt"] == null || s["clockOutAt"] == "",
+          orElse: () => <String, dynamic>{},
+        );
+    if (open.isEmpty) return widget.totalSeconds;
+    final inAt = open["clockInAt"]?.toString();
+    if (inAt == null || inAt.isEmpty) return widget.totalSeconds;
+    try {
+      final clockIn = DateTime.parse(inAt);
+      final elapsed = DateTime.now().difference(clockIn).inSeconds;
+      return widget.totalSeconds + elapsed;
+    } catch (_) {
+      return widget.totalSeconds;
     }
   }
 
   @override
   void initState() {
     super.initState();
-    _startIdleMonitoringIfNeeded();
+    if (_hasOpenSession) {
+      _startIdleMonitoring();
+      _startElapsedTimer();
+    }
   }
 
   @override
   void didUpdateWidget(HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _startIdleMonitoringIfNeeded();
+    if (_hasOpenSession) {
+      _startIdleMonitoring();
+      _startElapsedTimer();
+    } else {
+      _stopIdleMonitoring();
+      _stopElapsedTimer();
+    }
   }
 
   Future<void> _startBuzzer() async {
     _buzzerPlayer ??= AudioPlayer();
     try {
-      print('Buzzer: Starting buzzer playback...');
+      debugPrint('Buzzer: Starting buzzer playback...');
       await _buzzerPlayer!.setVolume(1.0);
       await _buzzerPlayer!.setReleaseMode(ReleaseMode.loop);
       await _buzzerPlayer!.play(AssetSource('buzzermp3ver.mp3'));
-      print('Buzzer: Playback started');
+      debugPrint('Buzzer: Playback started');
     } catch (e) {
-      print('Error starting buzzer: $e');
+      debugPrint('Error starting buzzer: $e');
       // Fallback: Play system alert sounds repeatedly
       _playBuzzerFallback();
     }
@@ -91,18 +114,28 @@ class _HomeScreenState extends State<HomeScreen> {
       try {
         await _buzzerPlayer!.stop();
         await _buzzerPlayer!.release();
-        print('Buzzer: Stopped');
+        debugPrint('Buzzer: Stopped');
       } catch (e) {
-        print('Error stopping buzzer: $e');
+        debugPrint('Error stopping buzzer: $e');
       }
       _buzzerPlayer = null;
+    }
+  }
+
+  /// Plays a clear buzzer burst (4 times) exactly at the 10 min mark only.
+  void _playBuzzerBurst() {
+    Future<void> play() async {
+      for (var i = 0; i < 4; i++) {
+        SystemSound.play(SystemSoundType.alert);
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+      }
     }
   }
 
   void _on10MinAway() {
     if (_awayDialogShown || !mounted) return;
     _awayDialogShown = true;
-    print('Inactivity: 10 min away - starting buzzer');
+    debugPrint('Inactivity: 10 min away - starting buzzer');
     _startBuzzer(); // Start buzzer at 10 min mark
 
     // At 15 min (5 min after 10-min warning), report to admin and notify employee
@@ -200,19 +233,23 @@ class _HomeScreenState extends State<HomeScreen> {
     _stopBuzzer();
   }
 
-  Future<void> _onClockIn(List<double> embedding) async {
-    await widget.onClockIn(embedding);
-    _startIdleMonitoring();
+  void _startElapsedTimer() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _hasOpenSession) setState(() {});
+    });
   }
 
-  Future<void> _onClockOut(List<double> embedding) async {
-    await widget.onClockOut(embedding);
-    _stopIdleMonitoring();
+  void _stopElapsedTimer() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
   }
+
 
   @override
   void dispose() {
     _stopIdleMonitoring();
+    _stopElapsedTimer();
     super.dispose();
   }
 
@@ -223,6 +260,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return "${hours.toString().padLeft(2, "0")}:${minutes.toString().padLeft(2, "0")}:${secs.toString().padLeft(2, "0")}";
   }
 
+  String _formatDateTime(String? isoStr) {
+    if (isoStr == null || isoStr.isEmpty) return "—";
+    try {
+      final dt = DateTime.parse(isoStr);
+      return "${dt.day.toString().padLeft(2, "0")}/${dt.month.toString().padLeft(2, "0")}/${dt.year} ${dt.hour.toString().padLeft(2, "0")}:${dt.minute.toString().padLeft(2, "0")}";
+    } catch (_) {
+      return isoStr;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_hasOpenSession && _inactiveTimer == null) {
@@ -230,16 +277,29 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted && _hasOpenSession) _startIdleMonitoring();
       });
     }
-
+    if (_hasOpenSession && _elapsedTimer == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _hasOpenSession) _startElapsedTimer();
+      });
+    }
 
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            "My Attendance",
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
           Text(
-            "Today's Total Working Time: ${_formatDuration(widget.totalSeconds)}",
+            "Today's Total Working Time: ${_formatDuration(_displayTotalSeconds)}",
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            "All sessions and totals are saved; they will appear whenever you log in again. Only you can access your portal (password + face verification).",
+            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
           ),
           const SizedBox(height: 16),
           Row(
@@ -252,8 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           MaterialPageRoute<void>(
                             builder: (_) => FaceCaptureForClockScreen(
                               title: "Clock In (Face Verify)",
-                              onCaptured: (embedding) => _onClockIn(embedding),
-                            ),
+                              onCaptured: (imageBase64) => widget.onClockIn(imageBase64),                            ),
                           ),
                         ),
                 child: const Text("Clock In (Face Verify)"),
@@ -267,8 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           MaterialPageRoute<void>(
                             builder: (_) => FaceCaptureForClockScreen(
                               title: "Clock Out (Face Verify)",
-                              onCaptured: (embedding) => _onClockOut(embedding),
-                            ),
+                              onCaptured: (imageBase64) => widget.onClockOut(imageBase64),                            ),
                           ),
                         ),
                 child: const Text("Clock Out (Face Verify)"),
@@ -279,35 +337,43 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Text("Refresh"),
               ),
               const SizedBox(width: 12),
-              OutlinedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const FaceDetectionScreen()),
-                  );
-                },
-                child: const Text("Test Model Wiring"),
-              ),
             ],
           ),
           const SizedBox(height: 20),
           AttendanceBarChart(
             hoursByDay: widget.hoursByDay,
-            title: "Hours Worked by Day (Last 30 Days)",
+            title: "Hours Worked by Day (Last ${widget.hoursChartDays} Days)",
             chartHeight: 160,
+            selectedDays: widget.onHoursChartDaysChanged != null ? widget.hoursChartDays : null,
+            onDaysChanged: widget.onHoursChartDaysChanged,
           ),
           const SizedBox(height: 20),
           const Text("Recent Sessions", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          Text(
+            "Each clock-in starts a new session. Clock out completes it and records duration.",
+            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+          ),
           const SizedBox(height: 8),
           Expanded(
             child: ListView.builder(
               itemCount: widget.events.length,
               itemBuilder: (context, index) {
                 final session = widget.events[index] as Map<String, dynamic>;
+                final isOpen = session["clockOutAt"] == null || session["clockOutAt"] == "";
+                int secs = (session["totalSeconds"] ?? 0) as int;
+                if (isOpen) {
+                  final inAt = session["clockInAt"]?.toString();
+                  if (inAt != null && inAt.isNotEmpty) {
+                    try {
+                      secs = DateTime.now().difference(DateTime.parse(inAt)).inSeconds;
+                    } catch (_) {}
+                  }
+                }
+                final durationText = isOpen ? _formatDuration(secs) : _formatDuration((session["totalSeconds"] ?? 0) as int);
                 return ListTile(
-                  title: Text("In: ${session["clockInAt"] ?? "-"}"),
-                  subtitle: Text("Out: ${session["clockOutAt"] ?? "-"}"),
-                  trailing: Text("${session["totalSeconds"] ?? 0}s"),
+                  title: Text("In: ${_formatDateTime(session["clockInAt"]?.toString())}"),
+                  subtitle: Text(isOpen ? "Out: — (clocked in)" : "Out: ${_formatDateTime(session["clockOutAt"]?.toString())}"),
+                  trailing: Text(durationText, style: const TextStyle(fontWeight: FontWeight.w600)),
                 );
               },
             ),

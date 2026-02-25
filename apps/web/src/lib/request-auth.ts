@@ -23,9 +23,9 @@ export async function requirePermission(
 ) {
   const user = await requireAuth(req);
   if (!user?.sub) {
-    return { allowed: false, user: null };
+    return { allowed: false, user: null, unauthenticated: true };
   }
 
   const allowed = await enforceUserPermission(user.sub, resource, action);
-  return { allowed, user };
+  return { allowed, user, unauthenticated: false };
 }

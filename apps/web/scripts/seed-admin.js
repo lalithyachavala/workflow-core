@@ -68,6 +68,22 @@ async function main() {
     console.log("Admin already exists.");
   }
 
+  const secondAdminEmail = "harshithadmin@euroasianngroup.com";
+  let existingSecondAdmin = await User.findOne({ email: secondAdminEmail });
+  if (!existingSecondAdmin) {
+    const passwordHash = await argon2.hash("harshith");
+    await User.create({
+      email: secondAdminEmail,
+      passwordHash,
+      roleIds: [adminRole._id],
+      isActive: true,
+      profile: { displayName: "harshuthadmin", employeeCode: "ADMIN002" },
+    });
+    console.log("Second Admin (harshuthadmin) seeded.");
+  } else {
+    console.log("Second Admin already exists.");
+  }
+
   let employeeRole = await Role.findOne({ name: "employee" });
   if (!employeeRole) {
     employeeRole = await Role.create({

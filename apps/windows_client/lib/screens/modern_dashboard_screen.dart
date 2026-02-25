@@ -8,6 +8,8 @@ class ModernDashboardScreen extends StatelessWidget {
     required this.events,
     required this.awayAlerts,
     required this.hoursByDay,
+    required this.hoursChartDays,
+    required this.onHoursChartDaysChanged,
     required this.onRefresh,
   });
 
@@ -15,6 +17,8 @@ class ModernDashboardScreen extends StatelessWidget {
   final List<dynamic> events;
   final List<dynamic> awayAlerts;
   final List<dynamic> hoursByDay;
+  final int hoursChartDays;
+  final void Function(int days) onHoursChartDaysChanged;
   final Future<void> Function() onRefresh;
 
   @override
@@ -76,8 +80,10 @@ class ModernDashboardScreen extends StatelessWidget {
           ],
           AttendanceBarChart(
             hoursByDay: hoursByDay,
-            title: "My Hours Worked (Last 30 Days)",
+            title: "My Hours Worked (Last $hoursChartDays Days)",
             chartHeight: 160,
+            selectedDays: hoursChartDays,
+            onDaysChanged: onHoursChartDaysChanged,
           ),
           const SizedBox(height: 20),
           Wrap(
