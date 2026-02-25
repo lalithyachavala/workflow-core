@@ -6,8 +6,11 @@ node_modules/
 .env
 .env.local
 .env.*.local
+<<<<<<< HEAD
 venv/
 **/venv/
+=======
+>>>>>>> 641dff6d54813d6aad927c7f396f551949f8aff8
 
 # Next.js
 apps/web/.next/
