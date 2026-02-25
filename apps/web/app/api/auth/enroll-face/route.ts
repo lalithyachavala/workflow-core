@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { connectMongo } from "@/src/lib/mongodb";
 import { requireAuth } from "@/src/lib/request-auth";
-import { enrollFace } from "@/src/biometric/face";
+import { User } from "@/src/db/models";
+import { lbphRegister } from "@/src/lib/lbph-client";
 
-const bodySchema = z.object({
-  embedding: z.array(z.number()).length(512),
-  pose: z.enum(["front", "left", "right"]),
-  profileImageBase64: z.string().optional(),
-});
-
+/**
+ * Face enrollment: either return instructions (no body) or register with imageBase64List (in-app).
+ */
 export async function POST(req: NextRequest) {
   await connectMongo();
   const user = await requireAuth(req);
@@ -17,21 +14,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
   }
 
-  const parsed = bodySchema.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json({ message: "Invalid payload." }, { status: 400 });
+  const dbUser = await User.findById(user.sub).lean();
+  const profile = dbUser?.profile as { employeeCode?: string; displayName?: string } | undefined;
+  const employeeCode = profile?.employeeCode ?? "";
+  const displayName = profile?.displayName ?? user.name ?? user.email ?? "User";
+
+  let body: { imageBase64List?: string[] } = {};
+  try {
+    body = await req.json();
+  } catch {
+    // no body
   }
 
-  try {
-    await enrollFace(
-      user.sub,
-      parsed.data.embedding,
-      parsed.data.pose,
-      parsed.data.profileImageBase64,
-    );
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Face enrollment failed.";
-    return NextResponse.json({ ok: false, message }, { status: 400 });
+  const imageBase64List = body?.imageBase64List;
+  if (Array.isArray(imageBase64List) && imageBase64List.length >= 5 && imageBase64List.length <= 15) {
+    if (!employeeCode) {
+      return NextResponse.json(
+        { ok: false, message: "Profile employee code is required for face enrollment." },
+        { status: 400 }
+      );
+    }
+    try {
+      const result = await lbphRegister(employeeCode, displayName, imageBase64List);
+      return NextResponse.json(result);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "LBPH register failed.";
+      return NextResponse.json({ ok: false, message }, { status: 502 });
+    }
   }
+
+  return NextResponse.json({
+    ok: true,
+    message: "Register your face using the face-attendance-system (register_face.py) with your employee code as the ID.",
+    employeeCode: employeeCode || "(set in profile)",
+  });
 }

@@ -9,6 +9,7 @@ import "screens/documents_screen.dart";
 import "screens/employees_screen.dart";
 import "screens/face_verification_login_screen.dart";
 import "screens/home_screen.dart";
+import "screens/inactivities_screen.dart";
 import "screens/insights_attendance_screen.dart";
 import "screens/job_details_setup_screen.dart";
 import "screens/login_activity_screen.dart";
@@ -70,6 +71,8 @@ class _AppRootState extends State<AppRoot> {
   String _selectedMenuItem = "admin_dashboard";
   Set<String> _expandedGroups = {"admin"};
   int _totalSeconds = 0;
+  int _hoursChartDays = 30;
+  int _employeeChartDays = 7;
   List<dynamic> _sessions = [];
   List<dynamic> _hoursByDay = [];
   List<dynamic> _roles = [];
@@ -102,10 +105,17 @@ class _AppRootState extends State<AppRoot> {
           : "${localPart[0].toUpperCase()}${localPart.substring(1)}";
       _selectedMenuItem = _isAdmin ? "admin_dashboard" : "employees_attendance";
       _expandedGroups = _isAdmin ? {"admin"} : {"employees"};
+      // Returning users with enrolled face: verify only (one capture). New users: enroll (3 poses).
+      // Use token from login response so we don't rely on token store read-after-write.
       try {
-        _faceEnrollMode = !(await _api.hasFaceTemplate());
+        final accessToken = login["accessToken"]?.toString();
+        final hasTemplate = accessToken != null && accessToken.isNotEmpty
+            ? await _api.hasFaceTemplateWithToken(accessToken)
+            : await _api.hasFaceTemplate();
+        _faceEnrollMode = !hasTemplate;
       } catch (_) {
-        _faceEnrollMode = false;
+        _faceEnrollMode =
+            false; // on error, show verify; backend will say "enroll first" if no template
       }
     } catch (e) {
       _error = e.toString();
@@ -116,14 +126,16 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
-  Future<void> _verifyFaceForLogin(List<double> embedding) async {
-    await _api.verifyFaceForLogin(embedding);
+  Future<void> _verifyFaceForLogin(String imageBase64) async {
+    await _api.verifyFaceForLogin(imageBase64);
   }
 
-  Future<void> _enrollMyFace(List<double> embedding, String pose,
-      {String? profileImageBase64}) async {
-    await _api.enrollMyFace(embedding, pose,
-        profileImageBase64: profileImageBase64);
+  Future<Map<String, dynamic>> _getEnrollFaceInfo() async {
+    return _api.getEnrollFaceInfo();
+  }
+
+  Future<void> _enrollWithImages(List<String> imageBase64List) async {
+    await _api.enrollMyFaceWithImages(imageBase64List);
   }
 
   void _onFaceVerified() {
@@ -144,8 +156,8 @@ class _AppRootState extends State<AppRoot> {
       _selectedEmployeeAttendance = {};
     });
     try {
-      final att =
-          await _api.fetchUserAttendance(user["_id"].toString(), days: 30);
+      final att = await _api.fetchUserAttendance(user["_id"].toString(),
+          days: _employeeChartDays);
       if (mounted && _selectedEmployee?["_id"] == user["_id"]) {
         setState(() => _selectedEmployeeAttendance = att);
       }
@@ -170,7 +182,7 @@ class _AppRootState extends State<AppRoot> {
       final futures = await Future.wait([
         _api.fetchToday(),
         _api.fetchSummary(),
-        _api.fetchMyHoursByDay(days: 30),
+        _api.fetchMyHoursByDay(days: _hoursChartDays),
         _api.fetchCurrentUser(),
         if (_isAdmin) _api.fetchRoles() else Future.value(<dynamic>[]),
         if (_isAdmin)
@@ -204,6 +216,10 @@ class _AppRootState extends State<AppRoot> {
           _sessions = sessions;
           _hoursByDay = hoursByDay;
           final profile = currentUser["profile"] as Map<String, dynamic>?;
+          final displayName = profile?["displayName"]?.toString().trim();
+          if (displayName != null && displayName.isNotEmpty) {
+            _currentUserName = displayName;
+          }
           _profilePictureBase64 =
               profile?["profilePictureBase64"]?.toString() ?? "";
           _roles = roles;
@@ -213,6 +229,10 @@ class _AppRootState extends State<AppRoot> {
           _awayAlerts = awayAlerts;
           _dashboardMetrics = dashboardMetrics;
         });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = "Refresh failed: $e");
       }
     } finally {
       if (mounted) {
@@ -321,7 +341,16 @@ class _AppRootState extends State<AppRoot> {
   Future<void> _enrollFace(String userId, String imageBase64) async {
     setState(() => _loading = true);
     try {
-      await _api.enrollFace(userId, imageBase64);
+      final res = await _api.enrollFace(userId, imageBase64);
+      if (mounted) {
+        final code = res["employeeCode"]?.toString() ?? "";
+        final msg = res["message"]?.toString() ?? "";
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text("Employee code for face registration: $code. $msg")),
+        );
+      }
       await _refresh();
     } finally {
       if (mounted) {
@@ -401,7 +430,8 @@ class _AppRootState extends State<AppRoot> {
     if (_needsFaceVerification) {
       return FaceVerificationLoginScreen(
         onVerify: _verifyFaceForLogin,
-        onEnroll: _enrollMyFace,
+        onEnrollInfo: _getEnrollFaceInfo,
+        onEnrollWithImages: _enrollWithImages,
         onVerified: _onFaceVerified,
         onVerificationFailed: _onFaceVerificationFailed,
         onBackToLogin: () {
@@ -420,170 +450,137 @@ class _AppRootState extends State<AppRoot> {
   }
 
   Widget _buildDesktopShell() {
-    final groups = _isAdmin
-        ? const [
-            ModernNavGroup(
-              keyName: "admin",
-              label: "Admin",
-              icon: Icons.token_outlined,
-              items: [
-                ModernNavItem(
-                    keyName: "admin_dashboard",
-                    label: "Dashboard",
-                    icon: Icons.desktop_windows_outlined),
-                ModernNavItem(
-                    keyName: "admin_company_structure",
-                    label: "Company Structure",
-                    icon: Icons.apartment),
-                ModernNavItem(
-                    keyName: "admin_job_setup",
-                    label: "Job Details Setup",
-                    icon: Icons.view_week_outlined),
-                ModernNavItem(
-                    keyName: "admin_qualification_setup",
-                    label: "Qualifications Setup",
-                    icon: Icons.check_box_outlined),
-                ModernNavItem(
-                    keyName: "admin_projects",
-                    label: "Projects",
-                    icon: Icons.list_alt_outlined),
-              ],
-            ),
-            ModernNavGroup(
-              keyName: "employees",
-              label: "Employees",
-              icon: Icons.grid_view,
-              items: [
-                ModernNavItem(
-                    keyName: "employees_list",
-                    label: "Employees",
-                    icon: Icons.groups),
-                ModernNavItem(
-                    keyName: "admin_login_activity",
-                    label: "Employee Login Activity",
-                    icon: Icons.history_outlined),
-              ],
-            ),
-            ModernNavGroup(
-              keyName: "manage",
-              label: "Manage",
-              icon: Icons.tune,
-              items: [
-                ModernNavItem(
-                    keyName: "manage_documents",
-                    label: "Documents",
-                    icon: Icons.description_outlined),
-                ModernNavItem(
-                    keyName: "employees_attendance",
-                    label: "Attendance",
-                    icon: Icons.schedule_outlined),
-                ModernNavItem(
-                    keyName: "manage_travel",
-                    label: "Travel",
-                    icon: Icons.flight_outlined),
-                ModernNavItem(
-                    keyName: "manage_overtime",
-                    label: "Overtime",
-                    icon: Icons.more_time_outlined),
-              ],
-            ),
-            ModernNavGroup(
-              keyName: "admin_reports",
-              label: "Admin Reports",
-              icon: Icons.auto_stories,
-              items: [
-                ModernNavItem(
-                    keyName: "reports",
-                    label: "Reports",
-                    icon: Icons.folder_open_outlined),
-              ],
-            ),
-            ModernNavGroup(
-              keyName: "system",
-              label: "System",
-              icon: Icons.settings_suggest_outlined,
-              items: [
-                ModernNavItem(
-                    keyName: "system_settings",
-                    label: "Settings",
-                    icon: Icons.settings_outlined),
-                ModernNavItem(
-                    keyName: "system_users",
-                    label: "Users",
-                    icon: Icons.person_outline),
-                ModernNavItem(
-                    keyName: "system_modules",
-                    label: "Manage Modules",
-                    icon: Icons.folder_outlined),
-                ModernNavItem(
-                    keyName: "system_permissions",
-                    label: "Manage Permissions",
-                    icon: Icons.lock_outline),
-                ModernNavItem(
-                    keyName: "system_fields",
-                    label: "Field Names",
-                    icon: Icons.straighten_outlined),
-              ],
-            ),
-            ModernNavGroup(
-              keyName: "insights",
-              label: "Insights",
-              icon: Icons.show_chart,
-              items: [
-                ModernNavItem(
-                    keyName: "insights_attendance",
-                    label: "Time and Attendance",
-                    icon: Icons.person_search_outlined),
-              ],
-            ),
-            ModernNavGroup(
-              keyName: "payroll",
-              label: "Payroll",
-              icon: Icons.receipt_long,
-              items: [
-                ModernNavItem(
-                    keyName: "payroll_salary",
-                    label: "Salary",
-                    icon: Icons.payments_outlined),
-                ModernNavItem(
-                    keyName: "payroll_reports",
-                    label: "Payroll Reports",
-                    icon: Icons.analytics_outlined),
-              ],
-            ),
-          ]
-        : const [
-            ModernNavGroup(
-              keyName: "employees",
-              label: "Employees",
-              icon: Icons.grid_view,
-              items: [
-                ModernNavItem(
-                    keyName: "employees_list",
-                    label: "Employees",
-                    icon: Icons.groups),
-                ModernNavItem(
-                    keyName: "employees_attendance",
-                    label: "Attendance",
-                    icon: Icons.schedule_outlined),
-                ModernNavItem(
-                    keyName: "login_activity",
-                    label: "Login Activity",
-                    icon: Icons.history_outlined),
-              ],
-            ),
-            ModernNavGroup(
-              keyName: "insights",
-              label: "Insights",
-              icon: Icons.show_chart,
-              items: [
-                ModernNavItem(
-                    keyName: "insights_attendance",
-                    label: "Time and Attendance",
-                    icon: Icons.person_search_outlined),
-              ],
-            ),
-          ];
+    final adminGroups = const [
+      ModernNavGroup(
+        keyName: "admin_dashboard",
+        label: "Dashboard",
+        icon: Icons.grid_view_outlined,
+        items: [],
+      ),
+      ModernNavGroup(
+        keyName: "recruitment",
+        label: "Recruitment",
+        icon: Icons.contact_phone_outlined,
+        items: [],
+      ),
+      ModernNavGroup(
+        keyName: "onboarding",
+        label: "Onboarding",
+        icon: Icons.rocket_launch_outlined,
+        items: [],
+      ),
+      ModernNavGroup(
+        keyName: "employees_group",
+        label: "Employee",
+        icon: Icons.people_outline,
+        items: [
+          ModernNavItem(
+            keyName: "employees_list",
+            label: "Employees",
+            icon: Icons.groups_outlined,
+          ),
+          ModernNavItem(
+            keyName: "admin_login_activity",
+            label: "Login Activity",
+            icon: Icons.history_outlined,
+          ),
+        ],
+      ),
+      ModernNavGroup(
+        keyName: "employees_attendance",
+        label: "Attendance",
+        icon: Icons.check_circle_outline,
+        items: [],
+      ),
+      ModernNavGroup(
+        keyName: "manage_leave",
+        label: "Leave",
+        icon: Icons.cancel_outlined,
+        items: [],
+      ),
+      ModernNavGroup(
+        keyName: "payroll_group",
+        label: "Payroll",
+        icon: Icons.account_balance_wallet_outlined,
+        items: [
+          ModernNavItem(
+            keyName: "payroll_dashboard",
+            label: "Dashboard",
+            icon: Icons.dashboard_outlined,
+          ),
+          ModernNavItem(
+            keyName: "payroll_salary",
+            label: "Payslips",
+            icon: Icons.receipt_long_outlined,
+          ),
+          ModernNavItem(
+            keyName: "payroll_reports",
+            label: "Payroll Reports",
+            icon: Icons.analytics_outlined,
+          ),
+          ModernNavItem(
+            keyName: "payroll_contract",
+            label: "Contract",
+            icon: Icons.description_outlined,
+          ),
+          ModernNavItem(
+            keyName: "payroll_allowances",
+            label: "Allowances",
+            icon: Icons.add_circle_outline,
+          ),
+          ModernNavItem(
+            keyName: "payroll_deductions",
+            label: "Deductions",
+            icon: Icons.remove_circle_outline,
+          ),
+          ModernNavItem(
+            keyName: "payroll_loan",
+            label: "Loan / Advanced Salary",
+            icon: Icons.monetization_on_outlined,
+          ),
+          ModernNavItem(
+            keyName: "payroll_encashments",
+            label: "Encashments & Reimbursements",
+            icon: Icons.request_quote_outlined,
+          ),
+        ],
+      ),
+    ];
+
+    final employeeGroups = const [
+      ModernNavGroup(
+        keyName: "admin_dashboard",
+        label: "Dashboard",
+        icon: Icons.grid_view_outlined,
+        items: [],
+      ),
+      ModernNavGroup(
+        keyName: "employees_attendance",
+        label: "Attendance",
+        icon: Icons.check_circle_outline,
+        items: [],
+      ),
+      ModernNavGroup(
+        keyName: "manage_leave",
+        label: "Leave",
+        icon: Icons.cancel_outlined,
+        items: [],
+      ),
+      ModernNavGroup(
+        keyName: "employees_group",
+        label: "Employee",
+        icon: Icons.people_outline,
+        items: [
+          ModernNavItem(
+            keyName: "login_activity",
+            label: "Login Activity",
+            icon: Icons.history_outlined,
+          ),
+        ],
+      ),
+    ];
+
+    final groups = _isAdmin ? adminGroups : employeeGroups;
 
     return Scaffold(
       body: Row(
@@ -621,93 +618,219 @@ class _AppRootState extends State<AppRoot> {
 
   Widget _buildTopHeaderBar() {
     return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
       ),
       child: Row(
         children: [
-          Expanded(
+          const Icon(Icons.menu, color: Color(0xFF6B7280), size: 24),
+          const SizedBox(width: 16),
+          InkWell(
+            onTap: () => setState(() => _selectedMenuItem = "admin_dashboard"),
+            child: const Text(
+              "Euroasiann Group",
+              style: TextStyle(
+                color: Color(0xFF1F2937),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const Spacer(),
+          // Timer Widget (Clickable to go to Attendance/HomeScreen)
+          InkWell(
+            onTap: () =>
+                setState(() => _selectedMenuItem = "employees_attendance"),
             child: Container(
-              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: const Color(0xFF10B981), width: 1),
+                borderRadius: BorderRadius.circular(4),
               ),
               child: const Row(
                 children: [
-                  SizedBox(width: 10),
-                  Icon(Icons.search, color: Color(0xFF9CA3AF), size: 18),
+                  Icon(Icons.timer_outlined,
+                      color: Color(0xFF10B981), size: 16),
                   SizedBox(width: 8),
                   Text(
-                    "Search employees, teams, requests...",
-                    style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
+                    "00:00:02",
+                    style: TextStyle(
+                      color: Color(0xFF10B981),
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          const Spacer(),
-          const Icon(Icons.notifications_none,
-              color: Color(0xFF6B7280), size: 21),
-          const SizedBox(width: 14),
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: const Color(0xFFE0ECFF),
-            backgroundImage: _profilePictureBase64.isNotEmpty
-                ? MemoryImage(base64Decode(_profilePictureBase64))
-                : null,
-            child: _profilePictureBase64.isEmpty
-                ? Text(
-                    _currentUserName.isNotEmpty
-                        ? _currentUserName.substring(0, 1).toUpperCase()
-                        : "U",
-                    style: const TextStyle(
-                        color: Color(0xFF1D4ED8), fontWeight: FontWeight.w700),
-                  )
-                : null,
+          const SizedBox(width: 20),
+          _buildHeaderIcon(Icons.settings_outlined, onTap: () {
+            setState(() => _selectedMenuItem = "system_settings");
+          }),
+          _buildHeaderIcon(Icons.notifications_none_outlined, badge: "0",
+              onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Notifications module coming soon")),
+            );
+          }),
+          // Language selection
+          PopupMenuButton<String>(
+            offset: const Offset(0, 48),
+            onSelected: (lang) {},
+            itemBuilder: (context) => [
+              _buildLanguageItem("English (US)", "🇺🇸", true),
+              _buildLanguageItem("Deutsche", "🇩🇪", false),
+              _buildLanguageItem("Español", "🇪🇸", false),
+              _buildLanguageItem("Français", "🇫🇷", false),
+              _buildLanguageItem("عربى", "🇦🇪", false),
+              _buildLanguageItem("Português (Brasil)", "🇧🇷", false),
+              _buildLanguageItem("Simplified Chinese", "🇨🇳", false),
+              _buildLanguageItem("Traditional Chinese", "🇹🇼", false),
+              _buildLanguageItem("Italian", "🇮🇹", false),
+            ],
+            child: _buildHeaderIcon(Icons.language_outlined),
           ),
-          const SizedBox(width: 6),
+          // Company selection
+          PopupMenuButton<String>(
+            offset: const Offset(0, 48),
+            onSelected: (comp) {},
+            itemBuilder: (context) => [
+              _buildCompanyItem("All Company", "AC", const Color(0xFF8DB600)),
+              _buildCompanyItem(
+                  "Euroasiann Group", "EG", const Color(0xFF1C1C1C),
+                  isLogo: true),
+              _buildCompanyItem("test", "T", const Color(0xFFE54F38)),
+            ],
+            child: _buildHeaderIcon(Icons.apartment_outlined),
+          ),
+          const SizedBox(width: 12),
+          // Profile
           PopupMenuButton<String>(
             onSelected: (v) {
               if (v == "logout") {
                 _logout();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("$v details coming soon")),
+                );
               }
             },
+            offset: const Offset(0, 48),
             itemBuilder: (context) => const [
-              PopupMenuItem<String>(value: "logout", child: Text("Logout")),
+              PopupMenuItem(value: "profile", child: Text("My Profile")),
+              PopupMenuItem(value: "username", child: Text("Change Username")),
+              PopupMenuItem(value: "password", child: Text("Change Password")),
+              PopupMenuDivider(),
+              PopupMenuItem(value: "logout", child: Text("Logout")),
             ],
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _currentUserName,
-                      style: const TextStyle(
-                          color: Color(0xFF111827),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                    Text(_isAdmin ? "Admin" : "Employee",
-                        style: const TextStyle(
-                            color: Color(0xFF6B7280), fontSize: 11)),
-                  ],
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFFF3F4F6),
+                  backgroundImage: _profilePictureBase64.isNotEmpty
+                      ? MemoryImage(base64Decode(_profilePictureBase64))
+                      : null,
+                  child: _profilePictureBase64.isEmpty
+                      ? const Icon(Icons.person,
+                          size: 20, color: Color(0xFF9CA3AF))
+                      : null,
                 ),
-                const SizedBox(width: 2),
+                const SizedBox(width: 8),
+                Text(
+                  _currentUserName,
+                  style: const TextStyle(
+                    color: Color(0xFF374151),
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const Icon(Icons.arrow_drop_down, color: Color(0xFF6B7280)),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildLanguageItem(
+      String label, String flag, bool active) {
+    return PopupMenuItem(
+      value: label,
+      child: Row(
+        children: [
+          Text(flag, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
+          if (active)
+            const Icon(Icons.check_circle_outline,
+                size: 16, color: Colors.green),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildCompanyItem(
+      String label, String initial, Color bgColor,
+      {bool isLogo = false}) {
+    return PopupMenuItem(
+      value: label,
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: isLogo ? Colors.transparent : bgColor,
+            child: isLogo
+                ? Image.asset('assets/logo.png', height: 20)
+                : Text(initial,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderIcon(IconData icon, {String? badge, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(icon, color: const Color(0xFF4B5563), size: 22),
+            if (badge != null && badge != "0")
+              Positioned(
+                right: -6,
+                top: -6,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE54F38),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    badge,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -720,6 +843,11 @@ class _AppRootState extends State<AppRoot> {
           events: _events,
           awayAlerts: _awayAlerts,
           hoursByDay: _hoursByDay,
+          hoursChartDays: _hoursChartDays,
+          onHoursChartDaysChanged: (d) {
+            setState(() => _hoursChartDays = d);
+            _refresh();
+          },
           onRefresh: _refresh,
         );
       case "admin_company_structure":
@@ -744,6 +872,12 @@ class _AppRootState extends State<AppRoot> {
           selectedUser: _selectedEmployee,
           selectedUserAttendance: _selectedEmployeeAttendance,
           isAdmin: _isAdmin,
+          employeeChartDays: _employeeChartDays,
+          onEmployeeChartDaysChanged: (d) {
+            setState(() => _employeeChartDays = d);
+            if (_selectedEmployee != null)
+              _onEmployeeSelected(_selectedEmployee!);
+          },
           onRefresh: _refresh,
           onCreateUser: _createUser,
           onUpdateUser: _updateUser,
@@ -772,6 +906,15 @@ class _AppRootState extends State<AppRoot> {
         return const SystemPermissionsScreen();
       case "system_fields":
         return const SystemFieldNamesScreen();
+      case "admin_inactivities":
+        if (_isAdmin) {
+          return InactivitiesScreen(
+            awayAlerts: _awayAlerts,
+            loading: _loading,
+            onRefresh: _refresh,
+          );
+        }
+        return _placeholderPanel("Inactivities", "Admin only.");
       case "employees_attendance":
         if (_isAdmin) {
           return const AdminAttendanceScreen();
@@ -780,11 +923,16 @@ class _AppRootState extends State<AppRoot> {
           totalSeconds: _totalSeconds,
           events: _sessions,
           hoursByDay: _hoursByDay,
+          hoursChartDays: _hoursChartDays,
           loading: _loading,
           onRefresh: _refresh,
           onClockIn: _clockIn,
           onClockOut: _clockOut,
           onReportAway: _reportAwayAlert,
+          onHoursChartDaysChanged: (d) {
+            setState(() => _hoursChartDays = d);
+            _refresh();
+          },
         );
       case "insights_attendance":
         return const InsightsAttendanceScreen();

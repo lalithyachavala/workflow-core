@@ -4,10 +4,11 @@ import { connectMongo } from "@/src/lib/mongodb";
 import { requireAuth } from "@/src/lib/request-auth";
 import { getClientIp } from "@/src/lib/ip";
 import { clockOut, registerDevice } from "@/src/attendance/service";
-import { verifyFace } from "@/src/biometric/face";
+import { User } from "@/src/db/models";
+import { verifyFaceForUser } from "@/src/lib/face-verify";
 
 const bodySchema = z.object({
-  imageBase64: z.string().min(20),
+  imageBase64: z.string().min(100),
   deviceFingerprint: z.string().min(3),
   hostname: z.string().min(1),
   osVersion: z.string().min(1),
@@ -16,8 +17,8 @@ const bodySchema = z.object({
 
 export async function POST(req: NextRequest) {
   await connectMongo();
-  const user = await requireAuth(req);
-  if (!user?.sub) {
+  const authUser = await requireAuth(req);
+  if (!authUser?.sub) {
     return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
   }
 
@@ -26,13 +27,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Invalid payload." }, { status: 400 });
   }
 
-  const faceResult = await verifyFace(user.sub, parsed.data.imageBase64);
-  if (!faceResult.accepted) {
-    return NextResponse.json({ message: "Face verification failed.", faceResult }, { status: 403 });
+  const user = await User.findById(authUser.sub).lean();
+  const employeeCode = (user?.profile as { employeeCode?: string } | undefined)?.employeeCode ?? "";
+
+  const faceResult = await verifyFaceForUser(parsed.data.imageBase64, employeeCode);
+  if (!faceResult.ok) {
+    return NextResponse.json(
+      { message: faceResult.message },
+      { status: faceResult.message.includes("Face service") ? 502 : 403 },
+    );
   }
 
   const device = await registerDevice({
-    userId: user.sub,
+    userId: authUser.sub,
     deviceFingerprint: parsed.data.deviceFingerprint,
     hostname: parsed.data.hostname,
     osVersion: parsed.data.osVersion,
@@ -41,10 +48,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const session = await clockOut({
-      userId: user.sub,
+      userId: authUser.sub,
       ip: getClientIp(req),
       deviceId: device._id.toString(),
-      faceScore: faceResult.score,
+      faceScore: faceResult.confidence ?? 0,
       verificationStatus: "verified",
     });
     return NextResponse.json({ ok: true, session });

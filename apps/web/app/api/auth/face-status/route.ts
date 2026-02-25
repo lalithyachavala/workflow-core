@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectMongo } from "@/src/lib/mongodb";
 import { requireAuth } from "@/src/lib/request-auth";
-import { FaceTemplate } from "@/src/db/models";
+import { User } from "@/src/db/models";
+import { lbphGetRegisteredIds } from "@/src/lib/lbph-client";
 
 export async function GET(req: NextRequest) {
   await connectMongo();
@@ -10,11 +11,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
   }
 
-  const template = await FaceTemplate.findOne({ userId: user.sub }).lean();
-  // Only consider new 3-pose embeddings as having a template (legacy SHA256 template is not used for verify).
-  const hasTemplate =
-    (template?.embeddingFront && typeof template.embeddingFront === "string") ||
-    (template?.embeddingLeft && typeof template.embeddingLeft === "string") ||
-    (template?.embeddingRight && typeof template.embeddingRight === "string");
+  const dbUser = await User.findById(user.sub).lean();
+  const employeeCode = (dbUser?.profile as { employeeCode?: string } | undefined)?.employeeCode ?? "";
+
+  let hasTemplate = false;
+  try {
+    const { ids } = await lbphGetRegisteredIds();
+    hasTemplate = ids.includes(employeeCode);
+  } catch {
+    // LBPH service down or not configured
+  }
+
   return NextResponse.json({ hasTemplate: !!hasTemplate });
 }

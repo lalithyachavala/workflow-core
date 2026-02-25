@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { z } from "zod";
 import { connectMongo } from "@/src/lib/mongodb";
 import { ensureBootstrap } from "@/src/lib/bootstrap";
-import { User, Role, LoginHistory } from "@/src/db/models";
+import { User, Role, LoginHistory, FaceTemplate } from "@/src/db/models";
 import { verifyPassword } from "@/src/lib/password";
 import { createAccessToken, createRefreshToken } from "@/src/lib/tokens";
 import { checkRateLimit } from "@/src/lib/rate-limit";
@@ -42,11 +42,12 @@ export async function POST(req: NextRequest) {
   const roles = await Role.find({ _id: { $in: user.roleIds } }).lean();
   const roleNames = roles.map((role) => role.name);
 
-  // Collect login analytics for employees, skipping admins
+  // Record login from this device/location for the user (any device, any location)
   const isEmployee = roleNames.includes("employee");
   const isAdmin = roleNames.includes("admin");
+  const recordLoginHistory = isEmployee && !isAdmin;
 
-  if (isEmployee && !isAdmin) {
+  if (recordLoginHistory) {
     const publicIp = req.headers.get("X-Public-Ip") || req.headers.get("x-public-ip");
     const ipAddress = publicIp || getClientIp(req) || "Unknown";
 
@@ -127,6 +128,9 @@ export async function POST(req: NextRequest) {
   });
   const refreshToken = await createRefreshToken(user._id.toString());
 
+  const faceTemplate = await FaceTemplate.findOne({ userId: user._id }).lean();
+  const isFaceRegistered = !!faceTemplate;
+
   return NextResponse.json({
     accessToken,
     refreshToken,
@@ -134,6 +138,7 @@ export async function POST(req: NextRequest) {
       id: user._id.toString(),
       email: user.email,
       roles: roleNames,
+      isFaceRegistered,
     },
   });
 }

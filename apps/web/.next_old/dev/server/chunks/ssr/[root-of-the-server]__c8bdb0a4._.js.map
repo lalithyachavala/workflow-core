@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 18, "column": 0}, "map": {"version":3,"sources":["file:///C:/dev/flow/workflow-core/apps/web/app/page.tsx"],"sourcesContent":["export default function Home() {\n  return (\n    <main className=\"mx-auto flex min-h-screen max-w-3xl flex-col justify-center p-8\">\n      <h1 className=\"text-3xl font-bold\">Employee Attendance API Backend</h1>\n      <p className=\"mt-4 text-zinc-600\">\n        This Next.js app is backend-only. Use the Flutter Windows client for all frontend workflows.\n      </p>\n      <p className=\"mt-2 text-zinc-600\">Health endpoint: /api/health</p>\n    </main>\n  );\n}\n"],"names":[],"mappings":";;;;;;AAAe,SAAS;IACtB,qBACE,6PAAC;QAAK,WAAU;;0BACd,6PAAC;gBAAG,WAAU;0BAAqB;;;;;;0BACnC,6PAAC;gBAAE,WAAU;0BAAqB;;;;;;0BAGlC,6PAAC;gBAAE,WAAU;0BAAqB;;;;;;;;;;;;AAGxC"}}]
+}

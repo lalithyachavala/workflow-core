@@ -1,0 +1,17 @@
+From https://github.com/lalithyachavala/workflow-core
+ * branch            main       -> FETCH_HEAD
+error: The following untracked working tree files would be overwritten by merge:
+	apps/web/src/lib/face-verify.ts
+	apps/web/src/lib/lbph-client.ts
+	apps/web/src/lib/mailer.ts
+	apps/windows_client/assets/README.md
+	apps/windows_client/lib/screens/face_capture_for_clock_screen.dart
+	apps/windows_client/lib/screens/inactivities_screen.dart
+	services/lbph-face/README.md
+	services/lbph-face/__pycache__/app.cpython-314.pyc
+	services/lbph-face/app.py
+	services/lbph-face/face_data.pkl
+	services/lbph-face/lbph_model.yml
+	services/lbph-face/requirements.txt
+Please move or remove them before you merge.
+Aborting

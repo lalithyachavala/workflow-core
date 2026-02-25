@@ -22,6 +22,8 @@ class EmployeesScreen extends StatefulWidget {
     required this.selectedUser,
     required this.selectedUserAttendance,
     required this.isAdmin,
+    required this.employeeChartDays,
+    required this.onEmployeeChartDaysChanged,
     required this.onRefresh,
     required this.onCreateUser,
     required this.onUpdateUser,
@@ -32,6 +34,8 @@ class EmployeesScreen extends StatefulWidget {
   final bool isAdmin;
   final Map<String, dynamic>? selectedUser;
   final Map<String, dynamic> selectedUserAttendance;
+  final int employeeChartDays;
+  final void Function(int days) onEmployeeChartDaysChanged;
   final Future<void> Function() onRefresh;
   final Future<void> Function(Map<String, dynamic>) onCreateUser;
   final Future<void> Function(String userId, Map<String, dynamic>) onUpdateUser;
@@ -45,21 +49,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   _EmployeesTab _activeTab = _EmployeesTab.employees;
   final _search = TextEditingController();
   int _selectedIndex = 0;
-  final List<Map<String, String>> _demoEmployees = const [
-    {
-      "name": "test employee",
-      "employeeNumber": "A9132",
-      "email": "test.employee@example.com",
-      "phone": "9876543210",
-      "timezone": "Asia/Kolkata",
-      "department": "Engineering",
-      "jobTitle": "QA Analyst",
-      "manager": "test manager",
-      "nationality": "Indian",
-      "dob": "1998-04-16",
-      "gender": "Male",
-    },
-  ];
+  final List<Map<String, String>> _demoEmployees = const [];
 
   @override
   void dispose() {
@@ -99,14 +89,20 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
-              await widget.onCreateUser({
-                "email": email.text.trim(),
-                "password": password.text.trim(),
-                "displayName": displayName.text.trim(),
-                "employeeCode": employeeCode.text.trim(),
-                "roleNames": roleNames.text.trim().split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
-              });
-              if (context.mounted) Navigator.pop(context);
+              try {
+                await widget.onCreateUser({
+                  "email": email.text.trim(),
+                  "password": password.text.trim(),
+                  "displayName": displayName.text.trim(),
+                  "employeeCode": employeeCode.text.trim(),
+                  "roleNames": roleNames.text.trim().split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+                });
+                if (context.mounted) Navigator.pop(context);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+                }
+              }
             },
             child: const Text("Save"),
           ),
@@ -194,7 +190,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Expanded(
+          SizedBox(
+            height: 450,
             child: Row(
               children: [
                 Expanded(
@@ -240,6 +237,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                 user: widget.selectedUser!,
                                 attendance: widget.selectedUserAttendance,
                                 isAdmin: widget.isAdmin,
+                                employeeChartDays: widget.employeeChartDays,
+                                onEmployeeChartDaysChanged: widget.onEmployeeChartDaysChanged,
                                 onEdit: () => _openEditDialog(context, widget.selectedUser!),
                                 onRefresh: widget.onRefresh,
                               )
@@ -275,12 +274,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Widget _buildEmployeesMain(Map<String, String>? selected, List<Map<String, String>> visible) {
     return Column(
       children: [
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            ElevatedButton.icon(onPressed: () {}, icon: const Icon(Icons.send_outlined), label: const Text("Invite an Employee")),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.person_add_alt_1_outlined), label: const Text("Add a New Employee")),
-            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: widget.isAdmin ? () => _openCreateUserDialog(context) : null,
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              label: const Text("Invite / Add Employee")
+            ),
             OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.filter_alt_outlined), label: const Text("Filter Employees")),
           ],
         ),
@@ -288,6 +290,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         SizedBox(
           height: 620,
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
                 width: 340,
@@ -396,12 +399,16 @@ class _EmployeeDetailCard extends StatelessWidget {
     required this.user,
     required this.attendance,
     required this.isAdmin,
+    required this.employeeChartDays,
+    required this.onEmployeeChartDaysChanged,
     required this.onEdit,
     required this.onRefresh,
   });
   final Map<String, dynamic> user;
   final Map<String, dynamic> attendance;
   final bool isAdmin;
+  final int employeeChartDays;
+  final void Function(int days) onEmployeeChartDaysChanged;
   final VoidCallback onEdit;
   final Future<void> Function() onRefresh;
 
@@ -469,8 +476,10 @@ class _EmployeeDetailCard extends StatelessWidget {
           const SizedBox(height: 12),
           AttendanceBarChart(
             hoursByDay: hoursByDay,
-            title: "Hours Worked - Last 30 Days",
+            title: "Hours Worked - Last $employeeChartDays Days",
             chartHeight: 180,
+            selectedDays: employeeChartDays,
+            onDaysChanged: onEmployeeChartDaysChanged,
           ),
           const SizedBox(height: 24),
           const Text("Recent Sessions", style: TextStyle(fontWeight: FontWeight.w600)),

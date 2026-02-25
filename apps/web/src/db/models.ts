@@ -6,6 +6,8 @@ const userSchema = new Schema(
     passwordHash: { type: String, required: true },
     roleIds: [{ type: Schema.Types.ObjectId, ref: "Role" }],
     isActive: { type: Boolean, default: true },
+    faceVerifyFailedAttempts: { type: Number, default: 0 },
+    faceVerifyLockedUntil: { type: Date, default: null },
     profile: {
       displayName: { type: String, default: "" },
       profilePictureBase64: { type: String, default: "" },
@@ -123,6 +125,7 @@ const awayAlertSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     employeeEmail: { type: String, required: true },
+    employeeName: { type: String, default: "" },
     awayAt: { type: Date, required: true, default: () => new Date() },
     minutesAway: { type: Number, required: true, default: 15 },
   },

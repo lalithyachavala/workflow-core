@@ -1,0 +1,3 @@
+{
+  "/api/auth/face-status/route": "app/api/auth/face-status/route.js"
+}

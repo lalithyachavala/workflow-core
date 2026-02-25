@@ -74,5 +74,17 @@ export async function ensureBootstrap() {
     });
   }
 
+  const harshithEmail = "harshithadmin@euroasianngroup.com";
+  const harshithExists = await User.findOne({ email: harshithEmail });
+  if (!harshithExists) {
+    await User.create({
+      email: harshithEmail,
+      passwordHash: await hashPassword("harshith"),
+      roleIds: [employeeRole._id, adminRole._id],
+      isActive: true,
+      profile: { displayName: "Harshith", employeeCode: "EMP002" },
+    });
+  }
+
   seeded = true;
 }

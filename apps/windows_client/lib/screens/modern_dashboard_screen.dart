@@ -8,6 +8,8 @@ class ModernDashboardScreen extends StatelessWidget {
     required this.events,
     required this.awayAlerts,
     required this.hoursByDay,
+    required this.hoursChartDays,
+    required this.onHoursChartDaysChanged,
     required this.onRefresh,
   });
 
@@ -15,143 +17,127 @@ class ModernDashboardScreen extends StatelessWidget {
   final List<dynamic> events;
   final List<dynamic> awayAlerts;
   final List<dynamic> hoursByDay;
+  final int hoursChartDays;
+  final void Function(int days) onHoursChartDaysChanged;
   final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Dashboard", style: TextStyle(fontSize: 31, fontWeight: FontWeight.w700)),
-                  SizedBox(height: 2),
-                  Text("Admin Overview", style: TextStyle(color: Color(0xFF6B7280))),
-                ],
-              ),
-              const Spacer(),
-              OutlinedButton.icon(
-                onPressed: () => onRefresh(),
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text("Refresh"),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (awayAlerts.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.shade300),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FB),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            // Hours Graph (Requested to be Orange)
+            AttendanceBarChart(
+              hoursByDay: hoursByDay,
+              title: "My Hours Worked (Last 30 Days)",
+              chartHeight: 160,
+              selectedDays: hoursChartDays,
+              onDaysChanged: onHoursChartDaysChanged,
+            ),
+            const SizedBox(height: 24),
+            // Top metric cards
+            Row(
+              children: [
+                Expanded(
+                  child: _MetricCard(
+                    title: "New Joining Today",
+                    value: "0",
+                    topBorderColor: Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _MetricCard(
+                    title: "New Joining This Week",
+                    value: "0",
+                    topBorderColor: Colors.orange,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _MetricCard(
+                    title: "Total Strength",
+                    value: "${metrics["totalEmployees"] ?? 1}",
+                    topBorderColor: const Color(0xFF6366F1),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Main Content Area
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Offline Employees
+                Expanded(
+                  flex: 2,
+                  child: _Panel(
+                    title: "Offline Employees",
+                    child: ListView(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        _EmployeeListTile(
+                            name: "Jayandra Babu",
+                            status: "on a break",
+                            statusColor: Colors.red.shade100,
+                            textColor: Colors.red),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Leave Requests
+                Expanded(
+                  flex: 2,
+                  child: _Panel(
+                    title: "Leave Requests To Approve",
+                    child: _EmptyState(
+                      icon: Icons.search_outlined,
+                      message: "No Records found.",
+                      subMessage: "No records available at the moment.",
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Announcements & On Leave
+                Expanded(
+                  flex: 2,
+                  child: Column(
                     children: [
-                      Icon(Icons.warning_amber, color: Colors.orange.shade800, size: 24),
-                      const SizedBox(width: 8),
-                      Text("Employees Away > 15 min", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                      _Panel(
+                        title: "Announcements",
+                        trailing: Icon(Icons.add,
+                            size: 16, color: Colors.red.shade400),
+                        child: _EmptyState(
+                          icon: Icons.search_outlined,
+                          message: "No Records found.",
+                          subMessage:
+                              "There are no announcements at the moment.",
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _Panel(
+                        title: "On Leave",
+                        child: const SizedBox(
+                            height: 100), // Placeholder for on leave list
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  ...awayAlerts.take(10).map((a) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.person_off, size: 20),
-                    title: Text(a["employeeEmail"]?.toString() ?? "-"),
-                    subtitle: Text("Away since: ${a["awayAt"]?.toString() ?? "-"}"),
-                  )),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
           ],
-          AttendanceBarChart(
-            hoursByDay: hoursByDay,
-            title: "My Hours Worked (Last 30 Days)",
-            chartHeight: 160,
-          ),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _MetricCard(title: "Total Employees", value: "${metrics["totalEmployees"] ?? 0}", note: "active employees", noteColor: const Color(0xFF16A34A)),
-              _MetricCard(title: "Present Today", value: "${metrics["presentToday"] ?? 0}", note: "clock-ins today", noteColor: const Color(0xFF16A34A)),
-              _MetricCard(title: "On Break", value: "${metrics["onBreak"] ?? 0}", note: "estimated breaks", noteColor: const Color(0xFF6B7280)),
-              _MetricCard(title: "Late Today", value: "${metrics["lateToday"] ?? 0}", note: "after shift start", noteColor: const Color(0xFFDC2626)),
-              _MetricCard(title: "Weekly OT Hours", value: "${metrics["weeklyOtHours"] ?? 0}h", note: "calculated overtime", noteColor: const Color(0xFFDC2626)),
-              _MetricCard(title: "Absent Today", value: "${metrics["absentToday"] ?? 0}", note: "employees absent", noteColor: const Color(0xFF6B7280)),
-              _MetricCard(title: "Pending Punches", value: "${metrics["pendingPunches"] ?? 0}", note: "pending clock-outs", noteColor: const Color(0xFF6B7280)),
-              _MetricCard(title: "Pending Leaves", value: "${metrics["pendingLeaves"] ?? 0}", note: "awaiting review", noteColor: const Color(0xFF6B7280)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 2,
-                child: _Panel(
-                  title: "Recent Attendance (IP & Device)",
-                  child: events.isEmpty
-                      ? const Padding(padding: EdgeInsets.all(16), child: Center(child: Text("No attendance events")))
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(8),
-                          itemCount: events.length > 15 ? 15 : events.length,
-                          itemBuilder: (context, index) {
-                            final event = events[index] as Map<String, dynamic>;
-                            final user = event["userId"] as Map<String, dynamic>?;
-                            final profile = user?["profile"] as Map<String, dynamic>?;
-                            final email = user?["email"] ?? profile?["displayName"] ?? "-";
-                            final device = event["deviceId"] as Map<String, dynamic>?;
-                            final hostname = device?["hostname"] ?? "-";
-                            final geo = event["geo"] as Map<String, dynamic>?;
-                            final geoStr = geo != null && (geo["country"]?.toString().isNotEmpty == true)
-                                ? "${geo["country"]}${geo["city"] != null && geo["city"].toString().isNotEmpty ? ", ${geo["city"]}" : ""}"
-                                : "";
-                            return ListTile(
-                              dense: true,
-                              title: Text("${event["type"] ?? "-"} | $email"),
-                              subtitle: Text("IP: ${event["ip"] ?? "-"}${geoStr.isNotEmpty ? " | $geoStr" : ""}\nDevice: $hostname"),
-                              isThreeLine: true,
-                            );
-                          },
-                        ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _Panel(
-                  title: "Away Alerts",
-                  child: awayAlerts.isEmpty
-                      ? const Padding(padding: EdgeInsets.all(16), child: Center(child: Text("No away alerts")))
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(8),
-                          itemCount: awayAlerts.length > 10 ? 10 : awayAlerts.length,
-                          itemBuilder: (context, index) {
-                            final a = awayAlerts[index] as Map<String, dynamic>;
-                            return ListTile(
-                              dense: true,
-                              leading: const Icon(Icons.warning_amber, size: 18, color: Colors.orange),
-                              title: Text(a["employeeEmail"]?.toString() ?? "-"),
-                              subtitle: Text(a["awayAt"]?.toString() ?? "-"),
-                            );
-                          },
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {},
+        backgroundColor: const Color(0xFFE54F38),
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -161,70 +147,193 @@ class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.title,
     required this.value,
-    required this.note,
-    required this.noteColor,
+    required this.topBorderColor,
   });
 
   final String title;
   final String value;
-  final String note;
-  final Color noteColor;
+  final Color topBorderColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 190,
-      height: 126,
-      padding: const EdgeInsets.all(14),
+      height: 140,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(color: Color(0xFF6B7280))),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 31, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
-          const Spacer(),
-          Text(note, style: TextStyle(fontSize: 12, color: noteColor, fontWeight: FontWeight.w500)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Column(
+          children: [
+            Container(height: 3, color: topBorderColor),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({required this.title, required this.child});
+  const _Panel({required this.title, required this.child, this.trailing});
   final String title;
   final Widget child;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 290,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF111827))),
-                const Spacer(),
-                TextButton(onPressed: () {}, child: const Text("View all")),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const Spacer(),
+                  trailing!,
+                ],
               ],
             ),
           ),
           const Divider(height: 1),
-          Expanded(child: child),
+          child,
         ],
+      ),
+    );
+  }
+}
+
+class _EmployeeListTile extends StatelessWidget {
+  const _EmployeeListTile({
+    required this.name,
+    required this.status,
+    required this.statusColor,
+    required this.textColor,
+  });
+  final String name;
+  final String status;
+  final Color statusColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 18,
+            backgroundColor: Color(0xFFE5E7EB),
+            child: Icon(Icons.person, size: 20, color: Colors.white),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            name,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, color: Color(0xFF374151)),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              status,
+              style: TextStyle(
+                  color: textColor, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const Spacer(),
+          const Icon(Icons.mail_outline, size: 16, color: Color(0xFF6B7280)),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState(
+      {required this.icon, required this.message, required this.subMessage});
+  final IconData icon;
+  final String message;
+  final String subMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 20),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(icon, size: 64, color: const Color(0xFF94A3B8)),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1F2937)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
       ),
     );
   }

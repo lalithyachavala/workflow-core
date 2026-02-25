@@ -1,17 +1,34 @@
 node_modules/
+**/node_modules/
 .DS_Store
+
+# Environment (never commit secrets)
+.env
+.env.local
+.env.*.local
+venv/
+**/venv/
 
 # Next.js
 apps/web/.next/
 apps/web/out/
 
-# Flutter
+# Flutter / Desktop
 apps/windows_client/assets/arcfaceresnet100-8.onnx
 apps/windows_client/.dart_tool/
 apps/windows_client/build/
+**/build/
+**/build_old/
 apps/windows_client/.flutter-plugins
 apps/windows_client/.flutter-plugins-dependencies
 apps/windows_client/.packages
+
+# Python
+**/__pycache__/
+*.pyc
+
+# Temp / Others
+node_modules_temp/
 
 # Logs
 *.log

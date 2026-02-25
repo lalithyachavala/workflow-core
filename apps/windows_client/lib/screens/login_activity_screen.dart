@@ -53,17 +53,19 @@ class _LoginActivityScreenState extends State<LoginActivityScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Login Activity",
+                  const Text("Login Activity",
                       style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF111827))),
-                  SizedBox(height: 4),
-                  Text("View and track your recent secure logins.",
-                      style: TextStyle(fontSize: 14, color: Color(0xFF6B7280))),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Logins from this device and from any other device or location (only you can see this).",
+                    style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.65)),
+                  ),
                 ],
               ),
               Container(
@@ -84,6 +86,7 @@ class _LoginActivityScreenState extends State<LoginActivityScreen> {
                       DropdownMenuItem(value: 30, child: Text("Last 30 days")),
                       DropdownMenuItem(value: 60, child: Text("Last 60 days")),
                       DropdownMenuItem(value: 90, child: Text("Last 90 days")),
+                      DropdownMenuItem(value: 365, child: Text("Last 365 days")),
                     ],
                     onChanged: (val) {
                       if (val != null) {

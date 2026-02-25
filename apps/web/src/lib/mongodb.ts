@@ -8,7 +8,9 @@ declare global {
 
 export function connectMongo() {
   if (!global.mongooseConn) {
-    global.mongooseConn = mongoose.connect(env.mongodbUri, { dbName: "workforce" });
+    global.mongooseConn = mongoose.connect(env.mongodbUri, {
+      dbName: "workforce"
+    });
   }
   return global.mongooseConn;
 }

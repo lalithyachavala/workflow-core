@@ -1,6 +1,39 @@
 import "package:flutter/material.dart";
 import "package:fl_chart/fl_chart.dart";
 
+void _showCustomDaysDialog(
+    BuildContext context, int currentDays, void Function(int) onDaysChanged) {
+  final controller = TextEditingController(text: currentDays.toString());
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text("Custom days"),
+      content: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          labelText: "Number of days (1–365)",
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+        TextButton(
+          onPressed: () {
+            final n = int.tryParse(controller.text);
+            if (n != null && n >= 1 && n <= 365) {
+              onDaysChanged(n);
+              Navigator.pop(ctx);
+            }
+          },
+          child: const Text("Apply"),
+        ),
+      ],
+    ),
+  );
+}
+
 class AttendanceBarChart extends StatelessWidget {
   const AttendanceBarChart({
     super.key,
@@ -8,12 +41,16 @@ class AttendanceBarChart extends StatelessWidget {
     this.title = "Hours Worked by Day",
     this.maxBarWidth = 16,
     this.chartHeight = 180,
+    this.selectedDays,
+    this.onDaysChanged,
   });
 
   final List<dynamic> hoursByDay;
   final String title;
   final double maxBarWidth;
   final double chartHeight;
+  final int? selectedDays;
+  final void Function(int days)? onDaysChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -41,12 +78,38 @@ class AttendanceBarChart extends StatelessWidget {
       },
     );
 
+    final hasFilters = selectedDays != null && onDaysChanged != null;
+    const presetDays = [7, 15, 30, 60];
+
     return SizedBox(
-      height: chartHeight + 60,
+      height: chartHeight + (hasFilters ? 100 : 60),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          Text(title,
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          if (hasFilters) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ...presetDays.map((d) => FilterChip(
+                      label: Text("$d"),
+                      selected: selectedDays == d,
+                      onSelected: (_) => onDaysChanged!(d),
+                    )),
+                FilterChip(
+                  label: const Text("Custom"),
+                  selected: selectedDays != null &&
+                      !presetDays.contains(selectedDays),
+                  onSelected: (_) => _showCustomDaysDialog(
+                      context, selectedDays ?? 7, onDaysChanged!),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           Expanded(
             child: BarChart(
@@ -57,10 +120,12 @@ class AttendanceBarChart extends StatelessWidget {
                   enabled: true,
                   touchTooltipData: BarTouchTooltipData(
                     getTooltipColor: (_) => const Color(0xFF2563EB),
-                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    tooltipPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     tooltipMargin: 8,
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      final d = hoursByDay[group.x.toInt()] as Map<String, dynamic>;
+                      final d =
+                          hoursByDay[group.x.toInt()] as Map<String, dynamic>;
                       final secs = (d["totalSeconds"] ?? 0) as num;
                       final hours = secs / 3600;
                       final mins = (secs % 3600) ~/ 60;
@@ -78,21 +143,28 @@ class AttendanceBarChart extends StatelessWidget {
                       showTitles: true,
                       reservedSize: 24,
                       getTitlesWidget: (val, meta) {
-                        if (val.toInt() < 0 || val.toInt() >= hoursByDay.length) {
+                        if (val.toInt() < 0 ||
+                            val.toInt() >= hoursByDay.length) {
                           return const SizedBox();
                         }
-                        final d = hoursByDay[val.toInt()] as Map<String, dynamic>;
+                        final d =
+                            hoursByDay[val.toInt()] as Map<String, dynamic>;
                         final dateStr = (d["date"] ?? "").toString();
-                        final short = dateStr.length >= 10 ? dateStr.substring(5) : dateStr;
+                        final short = dateStr.length >= 10
+                            ? dateStr.substring(5)
+                            : dateStr;
                         return Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
                             short,
-                            style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280)),
+                            style: const TextStyle(
+                                fontSize: 10, color: Color(0xFF6B7280)),
                           ),
                         );
                       },
-                      interval: hoursByDay.length > 14 ? (hoursByDay.length / 7).ceilToDouble() : 1,
+                      interval: hoursByDay.length > 14
+                          ? (hoursByDay.length / 7).ceilToDouble()
+                          : 1,
                     ),
                   ),
                   leftTitles: AxisTitles(
@@ -101,12 +173,15 @@ class AttendanceBarChart extends StatelessWidget {
                       reservedSize: 28,
                       getTitlesWidget: (val, meta) => Text(
                         "${val.toInt()}h",
-                        style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280)),
+                        style: const TextStyle(
+                            fontSize: 10, color: Color(0xFF6B7280)),
                       ),
                     ),
                   ),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                 ),
                 gridData: FlGridData(
                   show: true,
@@ -122,9 +197,9 @@ class AttendanceBarChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: hours,
-                        color: const Color(0xFF2563EB),
+                        color: const Color(0xFFE54F38),
                         width: maxBarWidth,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ],
                     showingTooltipIndicators: [0],
